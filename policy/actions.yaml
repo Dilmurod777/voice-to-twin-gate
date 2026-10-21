@@ -1,0 +1,63 @@
+# Every command the twin can perform. Read-only actions are admitted at any step.
+- verb: open_panel
+  part: access_panel
+  label: remove the access panel
+  mutates: true
+  requires: [parking_brake]
+  procedure_steps: [1]
+  admit: "panel 12A opened, step 1 of the procedure"
+  blocked:
+    parking_brake: "parking brake is not set"
+
+- verb: depressurise
+  part: fuel_system
+  label: depressurise the fuel system
+  mutates: true
+  requires: [panel_open]
+  procedure_steps: [2]
+  admit: "fuel system depressurised"
+  blocked:
+    panel_open: "access panel 12A is still closed"
+
+- verb: open_valve
+  part: fuel_valve
+  label: open the fuel valve
+  mutates: true
+  requires: [fuel_depressurised]
+  procedure_steps: [3]
+  admit: "fuel valve open"
+  blocked:
+    fuel_depressurised: "fuel system is not depressurised"
+
+- verb: remove_filter
+  part: fuel_filter
+  label: remove the fuel filter
+  mutates: true
+  requires: [fuel_depressurised, panel_open]
+  procedure_steps: [4]
+  admit: "fuel filter removed"
+  blocked:
+    fuel_depressurised: "fuel system is not depressurised"
+    panel_open: "access panel 12A is still closed"
+
+- verb: remove_pump
+  part: hydraulic_pump
+  label: remove the hydraulic pump
+  mutates: true
+  requires: [panel_open]
+  procedure_steps: [6]
+  admit: "hydraulic pump removed"
+  blocked:
+    panel_open: "access panel 12A is still closed"
+
+- verb: inspect
+  part: landing_gear
+  label: show the landing gear
+  mutates: false
+  admit: "read-only view"
+
+- verb: inspect
+  part: engine_cowl
+  label: show the engine cowl
+  mutates: false
+  admit: "read-only view"

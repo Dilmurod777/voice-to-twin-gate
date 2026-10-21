@@ -1,0 +1,10 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+
+# Fetched assets: large, and not ours to redistribute in bulk
+assets/models/
+assets/docs/
+assets/audio/
