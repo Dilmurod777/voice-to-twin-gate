@@ -81,6 +81,7 @@ class Session:
                     "note": self._note(decision, moves),
                     "trace": self._trace(index, action),
                     "after": self._after(spec) if moves else sorted(self.twin.state),
+                    "ms": timings[-1],
                 }
             )
 
@@ -96,7 +97,11 @@ class Session:
             },
             "arms": arms,
             "twin": self.state(),
-            "timings": {"parse_ms": round(parse_ms, 1), "arms": timings},
+            "timings": {
+                "parse_ms": round(parse_ms, 1),
+                "arms": timings,
+                "total_ms": round(parse_ms + sum(timings), 1),
+            },
         }
 
     def _trace(self, index: int, action: Action) -> list[dict]:

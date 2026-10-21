@@ -38,6 +38,7 @@ const esc = (text) =>
 const ms = (value) => (value < 10 ? `${value.toFixed(2)} ms` : `${Math.round(value)} ms`);
 
 let busy = false;
+const HISTORY = [];
 
 function buildBays() {
   $("verdicts").innerHTML = BAYS.map(
@@ -68,6 +69,7 @@ function resetBays() {
 }
 
 function renderArms(arms) {
+  clearInterval(ticker);
   window.lastArms = arms;
   arms.forEach((arm, index) => {
     const bay = document.querySelector(`.bay[data-arm="${index}"]`);
@@ -77,13 +79,15 @@ function renderArms(arms) {
     bay.querySelector(".code").textContent = arm.code;
     bay.querySelector(".msg").textContent = arm.message;
     bay.querySelector(".veil").textContent = arm.note;
-    bay.querySelector(".foot").textContent = arm.moves
-      ? "moves the twin"
-      : arm.status !== "ADMIT"
-        ? "nothing moves"
-        : arm.code === "READ_ONLY_OK"
-          ? "read-only"
-          : "no matching action";
+    bay.querySelector(".foot").innerHTML = `${
+      arm.moves
+        ? "moves the twin"
+        : arm.status !== "ADMIT"
+          ? "nothing moves"
+          : arm.code === "READ_ONLY_OK"
+            ? "read-only"
+            : "no matching action"
+    }<span class="took">${ms(arm.ms)}</span>`;
     bay.querySelector(".trace").innerHTML = (arm.trace || [])
       .map(
         (row) =>
@@ -94,24 +98,45 @@ function renderArms(arms) {
   });
 }
 
+const PENDING = [
+  "Queued. This arm will execute whatever the parse returns.",
+  "Queued. This arm waits for the manual, and only the manual.",
+  "Queued. This arm waits for the manual, the hierarchy and the state.",
+];
+
+let ticker = null;
+let started = 0;
+
+function armTicker() {
+  clearInterval(ticker);
+  ticker = setInterval(() => {
+    const seconds = ((performance.now() - started) / 1000).toFixed(1);
+    for (const bay of document.querySelectorAll('.bay[data-status="loading"]')) {
+      const code = bay.querySelector(".code");
+      if (code) code.textContent = `${seconds} s`;
+    }
+  }, 80);
+}
+
 function setBusy(on, text) {
   busy = on;
   $("cmd").disabled = on;
   $("cmd-form").querySelector("button").textContent = on ? "running" : "run";
   $("verdicts").dataset.busy = on ? "true" : "false";
-  if (on) {
-    $("heard").textContent = `reading “${text}”`;
-    busyFlow(text);
-    for (const bay of document.querySelectorAll(".bay")) {
-      bay.dataset.status = "loading";
-      bay.querySelector(".verdict").textContent = "…";
-      bay.querySelector(".code").textContent = "working";
-      bay.querySelector(".msg").textContent = "Reading the command, running this arm, checking the twin.";
-      bay.querySelector(".veil").textContent = "reading the command";
-      bay.querySelector(".trace").innerHTML = "";
-      bay.querySelector(".foot").textContent = "";
-    }
-  }
+  if (!on) return;
+  started = performance.now();
+  $("heard").textContent = `reading “${text}”`;
+  busyFlow(text);
+  document.querySelectorAll(".bay").forEach((bay, index) => {
+    bay.dataset.status = "loading";
+    bay.querySelector(".verdict").textContent = "…";
+    bay.querySelector(".code").textContent = "0.0 s";
+    bay.querySelector(".msg").textContent = PENDING[index];
+    bay.querySelector(".veil").textContent = "reading the command";
+    bay.querySelector(".trace").innerHTML = "";
+    bay.querySelector(".foot").textContent = "";
+  });
+  armTicker();
 }
 
 function flowCells(cells, busy) {
@@ -163,8 +188,12 @@ function renderTwin(twin) {
     })
     .join("");
 
-  const flags = FLAGS.map(
+  const flagsList = FLAGS.map(
     ([id, label]) => `<li data-on="${twin.state.includes(id)}">${label}</li>`,
+  ).join("");
+
+  const recent = HISTORY.map(
+    (row) => `<li><span class="t">${(row.total / 1000).toFixed(2)} s</span><span class="q">${esc(row.text)}</span></li>`,
   ).join("");
 
   $("twin").innerHTML = `
@@ -174,7 +203,11 @@ function renderTwin(twin) {
     </div>
     <div>
       <h2>aircraft state</h2>
-      <ul class="flags">${flags}</ul>
+      <ul class="flags">${flagsList}</ul>
+      <section class="recent">
+        <h2>recent commands</h2>
+        <ol class="history" id="history">${recent}</ol>
+      </section>
       <p class="note">The twin follows the 2026 gate. The other two columns are what would have happened instead.</p>
     </div>`;
 
@@ -183,6 +216,11 @@ function renderTwin(twin) {
       if (button.dataset.command) send(button.dataset.command);
     });
   }
+}
+
+function logCommand(text, total) {
+  HISTORY.unshift({ text, total });
+  HISTORY.splice(8);
 }
 
 async function send(text) {
@@ -200,8 +238,10 @@ async function send(text) {
     $("heard").textContent = `${source} → ${verb}${part ? " · " + part : " · no part"}`;
     renderFlow(result);
     renderArms(result.arms);
+    logCommand(result.parse.text, result.timings.total_ms);
     renderTwin(result.twin);
   } catch (error) {
+    clearInterval(ticker);
     $("heard").textContent = `failed: ${error.message}`;
     $("flow").dataset.busy = "false";
     resetBays();
@@ -236,6 +276,7 @@ $("cmd-form").addEventListener("submit", (event) => {
 $("reset").addEventListener("click", async () => {
   if (busy) return;
   const twin = await (await fetch("/api/reset", { method: "POST" })).json();
+  HISTORY.length = 0;
   renderTwin(twin);
   resetBays();
   idleFlow();
