@@ -23,6 +23,11 @@
         <p>one command, three validators</p>
       </div>
       <div class="hud" id="hud"></div>
+  <nav class="links" aria-label="project links">
+    <a href="https://github.com/Dilmurod777/voice-to-twin-gate">code</a>
+    <a href="https://doi.org/10.3390/s23031729">paper</a>
+    <a href="https://dilmurod777.github.io/">author</a>
+  </nav>
     </header>
 
 <section class="brief">
@@ -42,10 +47,20 @@
       <tr><th scope="row">Gate · 2026</th><td>0/13</td><td>6/6</td><td>5/5</td></tr>
     </tbody>
   </table>
-  <p class="brief-note">
-    Runs here: the local parse, the manual text, the hierarchy walk and the gate. Staged:
-    Windows TTS voice, a schematic airframe, six hand-written steps, our own part IDs.
-  </p>
+  <div class="lanes">
+    <p class="lane-head"><span class="who">shared</span><span class="pipe"><span>speech</span><span>parse</span><span class="fork">what differs is everything after this</span></span></p>
+    <p class="lane" data-arm="0"><span class="who">LLM only</span><span class="pipe"><span>execute</span></span></p>
+    <p class="lane" data-arm="1"><span class="who">Manual · 2023</span><span class="pipe"><span>manual lookup</span><span>execute</span></span></p>
+    <p class="lane" data-arm="2"><span class="who">Gate · 2026</span><span class="pipe"><span>hierarchy</span><span>manual lookup</span><span>state</span><span>execute</span></span></p>
+  </div>
+  <div class="brief-note">
+    <p>Twenty-four commands and six steps were written before the run — one per failure mode
+    expected, nothing tuned afterwards. Reproduce with <code>python -m eval.run_eval</code>.</p>
+    <p>Runs here: the parse, the manual, the hierarchy walk and the gate. Staged: Windows TTS
+    voice and a schematic airframe whose part IDs are ours. Not here: the Unity/HoloLens
+    client, where the twin is the aircraft's own part hierarchy — that is what a deployed
+    version would talk to.</p>
+  </div>
 </section>
 
     <main class="board">
