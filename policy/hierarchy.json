@@ -1,0 +1,35 @@
+{
+  "id": "aircraft",
+  "label": "Gulfstream III",
+  "children": [
+    {
+      "id": "nose",
+      "label": "nose section",
+      "children": [{ "id": "landing_gear", "label": "nose landing gear" }]
+    },
+    {
+      "id": "wing_left",
+      "label": "left wing root",
+      "children": [
+        { "id": "fuel_system", "label": "fuel system" },
+        {
+          "id": "access_panel",
+          "label": "access panel 12A",
+          "door": true,
+          "children": [
+            { "id": "fuel_valve", "label": "fuel shut-off valve" },
+            { "id": "fuel_filter", "label": "fuel filter element" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "engine_left",
+      "label": "left engine",
+      "children": [
+        { "id": "engine_cowl", "label": "engine cowl" },
+        { "id": "hydraulic_pump", "label": "hydraulic pump" }
+      ]
+    }
+  ]
+}

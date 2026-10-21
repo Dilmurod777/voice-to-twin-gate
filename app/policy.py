@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 
 import yaml
@@ -11,5 +12,11 @@ def load_actions(path: Path = POLICY_DIR / "actions.yaml") -> dict[str, dict]:
     return {f"{row['verb']}|{row['part']}": row for row in rows}
 
 
-def load_procedure(path: Path = POLICY_DIR / "procedure.yaml") -> dict:
-    return yaml.safe_load(path.read_text(encoding="utf-8"))
+def load_manual(path: Path = POLICY_DIR / "manual.md") -> dict[int, str]:
+    """The numbered steps of the procedure, as the 2023 arm reads them."""
+    steps = {}
+    for line in path.read_text(encoding="utf-8").splitlines():
+        found = re.match(r"^(\d+)\.\s+(.+)$", line.strip())
+        if found:
+            steps[int(found.group(1))] = found.group(2)
+    return steps
