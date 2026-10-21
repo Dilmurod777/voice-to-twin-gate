@@ -94,7 +94,7 @@ function renderArm(arm) {
   bay.querySelector(".trace").innerHTML = (arm.trace || [])
     .map(
       (row) =>
-        `<li data-state="${row.state || "pass"}" data-shared="${row.stage === "parse"}"><b>${esc(row.stage)}</b><span>${esc(row.value)}</span><em>${ms(row.ms || 0)}</em></li>`,
+        `<li data-state="${row.state || "pass"}" data-shared="${row.stage === "parse" || row.stage === "whisper"}"><b>${esc(row.stage)}</b><span>${esc(row.value)}</span><em>${ms(row.ms || 0)}</em></li>`,
     )
     .join("");
   window.twinViews?.[arm.index]?.show(arm);
@@ -162,6 +162,7 @@ function busyFlow(text) {
   $("flow").innerHTML = flowCells(
     [
       { stage: "command", value: `“${text}”` },
+      { stage: "whisper", value: "listening" },
       { stage: "parse", value: "model → vocabulary" },
       { stage: "validators", value: "three, in parallel" },
       { stage: "twin", value: "state" },
@@ -175,6 +176,7 @@ function renderFlow(result) {
   const { parse, timings } = result;
   $("flow").innerHTML = flowCells([
     { stage: "command", value: `“${parse.text}”` },
+    { stage: "whisper", value: timings.asr_ms ? ms(timings.asr_ms) : "typed" },
     { stage: "parse", value: `${parse.source} · ${ms(timings.parse_ms)}` },
     { stage: "validators", value: `3 arms · ${ms(timings.arms.reduce((a, b) => a + b, 0))}` },
     { stage: "twin", value: result.twin.step > result.twin.total ? "done" : `step ${result.twin.step}` },
@@ -229,11 +231,16 @@ function logCommand(text, total) {
   HISTORY.splice(8);
 }
 
-function flowHead(parse, parseMs) {
+function flowHead(parse, parseMs, asrMs = 0) {
   $("flow").dataset.busy = "true";
   $("flow").innerHTML = flowCells(
     [
-      { stage: "command", value: `\u201c${parse.text}\u201d`, state: "pass" },
+      {
+        stage: "command",
+        value: `\u201c${parse.text}\u201d`,
+        state: "pass",
+      },
+      { stage: "whisper", value: asrMs ? ms(asrMs) : "typed", state: "pass" },
       { stage: "parse", value: `${parse.source} \u00b7 ${ms(parseMs)}`, state: "pass" },
       { stage: "validators", value: "three, in parallel" },
       { stage: "twin", value: "state" },
@@ -248,7 +255,7 @@ async function arm(index) {
   return response.json();
 }
 
-async function send(text) {
+async function send(text, asrMs = 0) {
   if (busy) return;
   setBusy(true, text);
   const began = performance.now();
@@ -256,14 +263,15 @@ async function send(text) {
     const response = await fetch("/api/command", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text }),
+      body: JSON.stringify({ text, asr_ms: asrMs }),
     });
     if (!response.ok) throw new Error(`server ${response.status}`);
     const head = await response.json();
 
     const { verb, part, source } = head.parse;
-    $("heard").textContent = `${source} \u2192 ${verb}${part ? " \u00b7 " + part : " \u00b7 no part"}`;
-    flowHead(head.parse, head.timings.parse_ms);
+    const heard = `${source} \u2192 ${verb}${part ? " \u00b7 " + part : " \u00b7 no part"}`;
+    $("heard").textContent = asrMs ? `whisper ${ms(asrMs)} \u2192 ${heard}` : heard;
+    flowHead(head.parse, head.timings.parse_ms, asrMs);
     renderTwin(head.twin);
 
     const answers = [null, null, null];
@@ -283,7 +291,7 @@ async function send(text) {
 
     renderFlow({
       parse: head.parse,
-      timings: { parse_ms: head.timings.parse_ms, arms: answers.map((a) => a.ms) },
+      timings: { parse_ms: head.timings.parse_ms, asr_ms: asrMs, arms: answers.map((a) => a.ms) },
       twin: twinState,
     });
     logCommand(head.parse.text, performance.now() - began);
@@ -303,15 +311,27 @@ function buildGroups() {
     ([title, commands]) => `
       <section class="group">
         <h2>${title}</h2>
-        ${commands.map((text) => `<button class="chip" type="button">${text}</button>`).join("")}
+        ${commands
+          .map(
+            (text) => `<div class="cmd-row">
+          <button class="play" type="button" data-text="${esc(text)}" aria-label="play “${esc(text)}”">▶</button>
+          <button class="chip" type="button">${text}</button>
+        </div>`,
+          )
+          .join("")}
       </section>`,
   ).join("");
 
   for (const chip of document.querySelectorAll(".chip")) {
     chip.addEventListener("click", () => {
-      $("cmd").value = chip.textContent.trim();
-      send(chip.textContent.trim());
+      const text = chip.textContent.trim();
+      $("cmd").value = text;
+      send(text);
     });
+  }
+
+  for (const play of document.querySelectorAll(".play")) {
+    play.addEventListener("click", () => runClip(play.dataset.text));
   }
 }
 
@@ -338,6 +358,7 @@ function idleFlow() {
   $("flow").dataset.busy = "false";
   $("flow").innerHTML = flowCells([
     { stage: "command", value: "say or type one" },
+    { stage: "whisper", value: "16 kHz clip" },
     { stage: "parse", value: "model → symbols" },
     { stage: "validators", value: "three, in parallel" },
     { stage: "twin", value: "state" },
@@ -351,68 +372,3 @@ fetch("/api/state")
   .then((response) => response.json())
   .then(renderTwin);
 
-let recorder = null;
-let chunks = [];
-
-async function toggleMic() {
-  const button = $("mic");
-  if (recorder && recorder.state === "recording") {
-    recorder.stop();
-    return;
-  }
-  let stream;
-  try {
-    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-  } catch {
-    $("heard").textContent = "no microphone permission";
-    return;
-  }
-  chunks = [];
-  recorder = new MediaRecorder(stream, { mimeType: "audio/webm" });
-  recorder.ondataavailable = (event) => chunks.push(event.data);
-  recorder.onstop = async () => {
-    stream.getTracks().forEach((track) => track.stop());
-    button.dataset.rec = "false";
-    button.textContent = "rec";
-    $("heard").textContent = "transcribing the clip";
-    const audio = new Blob(chunks, { type: "audio/webm" });
-    try {
-      const buffer = await new AudioContext().decodeAudioData(await audio.arrayBuffer());
-      const rate = 16000;
-      const off = new OfflineAudioContext(1, Math.ceil(buffer.duration * rate), rate);
-      const source = off.createBufferSource();
-      source.buffer = buffer;
-      source.connect(off.destination);
-      source.start();
-      const pcm = (await off.startRendering()).getChannelData(0);
-      const response = await fetch("/api/transcribe", {
-        method: "POST",
-        headers: { "Content-Type": "application/octet-stream" },
-        body: pcm,
-      });
-      if (!response.ok) throw new Error(`server ${response.status}`);
-      const { text, ms: took } = await response.json();
-      const said = text.trim();
-      if (!said) {
-        $("heard").textContent = "nothing heard";
-        return;
-      }
-      $("cmd").value = said;
-      await send(said);
-      $("heard").textContent = `whisper ${ms(took)} → ${$("heard").textContent}`;
-      const cell = document.querySelector("#flow .flow-cell .v");
-      if (cell) cell.textContent = `“${said}” · whisper ${ms(took)}`;
-    } catch (error) {
-      $("heard").textContent = `transcription failed: ${error.message}`;
-    }
-  };
-  recorder.start();
-  button.dataset.rec = "true";
-  button.textContent = "stop";
-  $("heard").textContent = "recording — click stop";
-  setTimeout(() => {
-    if (recorder && recorder.state === "recording") recorder.stop();
-  }, 7000);
-}
-
-$("mic").addEventListener("click", toggleMic);

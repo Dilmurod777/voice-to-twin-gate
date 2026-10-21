@@ -1,4 +1,4 @@
-﻿:root {
+:root {
   --bg: #171a1f;
   --panel: #20242b;
   --inset: #191c21;
@@ -345,7 +345,7 @@ button {
 
 .flow {
   display: grid;
-  grid-template-columns: 1.3fr 1fr 1fr 1fr;
+  grid-template-columns: 1.4fr 0.8fr 1fr 1.05fr 0.7fr;
   border: 1px solid var(--line);
   border-radius: 2px;
   background: var(--panel);
@@ -392,6 +392,7 @@ button {
 .flow[data-busy="true"] .flow-cell:nth-child(2)::after { animation-delay: 0.12s; }
 .flow[data-busy="true"] .flow-cell:nth-child(3)::after { animation-delay: 0.24s; }
 .flow[data-busy="true"] .flow-cell:nth-child(4)::after { animation-delay: 0.36s; }
+.flow[data-busy="true"] .flow-cell:nth-child(5)::after { animation-delay: 0.48s; }
 
 @keyframes sweep {
   0% { width: 0; opacity: 0; }
@@ -454,6 +455,7 @@ input:disabled { opacity: 0.65; }
   .flow { grid-template-columns: 1fr 1fr; }
   .flow-cell:nth-child(3) { border-left: 0; border-top: 1px solid var(--line); }
   .flow-cell:nth-child(4) { border-top: 1px solid var(--line); }
+  .flow-cell:nth-child(5) { grid-column: 1 / -1; border-left: 0; border-top: 1px solid var(--line); }
   .view { aspect-ratio: 16 / 10; }
 }
 
@@ -591,3 +593,18 @@ input:disabled { opacity: 0.65; }
 @media (prefers-reduced-motion: reduce) {
   .mic[data-rec="true"] { animation: none; }
 }
+
+.cmd-row { display: flex; gap: 4px; margin-bottom: 3px; }
+.cmd-row .chip { flex: 1; min-width: 0; margin-bottom: 0; }
+.play {
+  flex: none;
+  width: 24px;
+  padding: 0;
+  font: 400 8px/1 var(--mono);
+  color: var(--dim);
+  background: transparent;
+  border: 1px solid var(--line);
+  border-left: 2px solid var(--line);
+}
+.play:hover,
+.play[data-playing="true"] { color: var(--amber); border-color: var(--amber); }

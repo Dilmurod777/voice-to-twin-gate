@@ -49,7 +49,7 @@ class Session:
         self.twin = Twin(step=1)
         self.pending: dict | None = None
 
-    def prepare(self, text: str) -> dict:
+    def prepare(self, text: str, asr_ms: float = 0) -> dict:
         started = perf_counter()
         action, source = parse(text, ACTIONS)
         parse_ms = round((perf_counter() - started) * 1000, 1)
@@ -60,6 +60,7 @@ class Session:
             "twin": Twin(step=self.twin.step, state=set(self.twin.state)),
             "applied": False,
             "parse_ms": parse_ms,
+            "asr_ms": asr_ms,
         }
         return {
             "parse": {
@@ -69,7 +70,7 @@ class Session:
                 "text": text,
             },
             "twin": self.state(),
-            "timings": {"parse_ms": parse_ms},
+            "timings": {"parse_ms": parse_ms, "asr_ms": asr_ms},
         }
 
     def arm(self, index: int) -> dict:
@@ -94,6 +95,11 @@ class Session:
             pending["applied"] = True
 
         rows = [
+            *(
+                [Step(stage="whisper", value="small.en · 16 kHz", ms=pending["asr_ms"])]
+                if pending.get("asr_ms")
+                else []
+            ),
             Step(
                 stage="parse",
                 value=f"{action.verb} · {action.part or 'no part'}",
@@ -184,6 +190,7 @@ class Session:
 
 class Command(BaseModel):
     text: str
+    asr_ms: float = 0
 
 
 app = FastAPI(title="voice-to-twin-gate")
@@ -192,7 +199,7 @@ session = Session()
 
 @app.post("/api/command")
 def command(body: Command) -> dict:
-    return session.prepare(body.text.strip())
+    return session.prepare(body.text.strip(), body.asr_ms)
 
 
 @app.post("/api/arm/{index}")
