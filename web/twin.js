@@ -252,8 +252,7 @@ class View {
     const { centre, radius } = this.boxes.get(id);
     const aspect = this.camera.aspect;
     const distance =
-      Math.min(Math.max(radius * 5.2, 8.8), 15) *
-      (aspect < 1.2 ? 1.25 : aspect > 1.55 ? 0.86 : 1);
+      Math.min(Math.max(radius * 6, 11.5), 16) * (aspect < 1.2 ? 1.25 : 1);
     const bearing = new THREE.Vector3(-0.8, 0.46, -0.62).normalize();
     // Keep the aircraft in frame around the part: the eye goes to the part, not to a slab.
     const anchor = new THREE.Vector3(0, 0, 0.2).lerp(centre, 0.6);

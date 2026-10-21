@@ -68,34 +68,35 @@ function resetBays() {
   }
 }
 
+function renderArm(arm) {
+  const bay = document.querySelector(`.bay[data-arm="${arm.index}"]`);
+  if (!bay) return;
+  (window.lastArms ||= [])[arm.index] = arm;
+  bay.dataset.status = arm.status === "ADMIT" && arm.code === "READ_ONLY_OK" ? "READ_ONLY_OK" : arm.status;
+  bay.querySelector(".verdict").textContent = arm.status;
+  bay.querySelector(".code").textContent = arm.code;
+  bay.querySelector(".msg").textContent = arm.message;
+  bay.querySelector(".veil").textContent = arm.note;
+  bay.querySelector(".foot").innerHTML = `${
+    arm.moves
+      ? "moves the twin"
+      : arm.status !== "ADMIT"
+        ? "nothing moves"
+        : arm.code === "READ_ONLY_OK"
+          ? "read-only"
+          : "no matching action"
+  }<span class="took">${ms(arm.ms)}</span>`;
+  bay.querySelector(".trace").innerHTML = (arm.trace || [])
+    .map(
+      (row) =>
+        `<li data-state="${row.state || "pass"}"><b>${esc(row.stage)}</b><span>${esc(row.value)}</span></li>`,
+    )
+    .join("");
+  window.twinViews?.[arm.index]?.show(arm);
+}
+
 function renderArms(arms) {
-  clearInterval(ticker);
-  window.lastArms = arms;
-  arms.forEach((arm, index) => {
-    const bay = document.querySelector(`.bay[data-arm="${index}"]`);
-    if (!bay) return;
-    bay.dataset.status = arm.status === "ADMIT" && arm.code === "READ_ONLY_OK" ? "READ_ONLY_OK" : arm.status;
-    bay.querySelector(".verdict").textContent = arm.status;
-    bay.querySelector(".code").textContent = arm.code;
-    bay.querySelector(".msg").textContent = arm.message;
-    bay.querySelector(".veil").textContent = arm.note;
-    bay.querySelector(".foot").innerHTML = `${
-      arm.moves
-        ? "moves the twin"
-        : arm.status !== "ADMIT"
-          ? "nothing moves"
-          : arm.code === "READ_ONLY_OK"
-            ? "read-only"
-            : "no matching action"
-    }<span class="took">${ms(arm.ms)}</span>`;
-    bay.querySelector(".trace").innerHTML = (arm.trace || [])
-      .map(
-        (row) =>
-          `<li data-state="${row.state || "pass"}"><b>${esc(row.stage)}</b><span>${esc(row.value)}</span></li>`,
-      )
-      .join("");
-    window.twinViews?.[index]?.show(arm);
-  });
+  arms.forEach(renderArm);
 }
 
 const PENDING = [
@@ -143,7 +144,7 @@ function flowCells(cells, busy) {
   return cells
     .map(
       (cell, index) => `
-      <div class="flow-cell" data-state="${busy ? "busy" : cell.state || "pass"}" style="--i:${index}">
+      <div class="flow-cell" data-state="${cell.state || (busy ? "busy" : "pass")}" style="--i:${index}">
         <p class="k">${esc(cell.stage)}</p>
         <p class="v">${esc(cell.value)}</p>
       </div>`,
@@ -223,9 +224,29 @@ function logCommand(text, total) {
   HISTORY.splice(8);
 }
 
+function flowHead(parse, parseMs) {
+  $("flow").dataset.busy = "true";
+  $("flow").innerHTML = flowCells(
+    [
+      { stage: "command", value: `\u201c${parse.text}\u201d`, state: "pass" },
+      { stage: "parse", value: `${parse.source} \u00b7 ${ms(parseMs)}`, state: "pass" },
+      { stage: "validators", value: "three, in parallel" },
+      { stage: "twin", value: "state" },
+    ],
+    true,
+  );
+}
+
+async function arm(index) {
+  const response = await fetch(`/api/arm/${index}`, { method: "POST" });
+  if (!response.ok) throw new Error(`arm ${index}: server ${response.status}`);
+  return response.json();
+}
+
 async function send(text) {
   if (busy) return;
   setBusy(true, text);
+  const began = performance.now();
   try {
     const response = await fetch("/api/command", {
       method: "POST",
@@ -233,19 +254,41 @@ async function send(text) {
       body: JSON.stringify({ text }),
     });
     if (!response.ok) throw new Error(`server ${response.status}`);
-    const result = await response.json();
-    const { verb, part, source } = result.parse;
-    $("heard").textContent = `${source} → ${verb}${part ? " · " + part : " · no part"}`;
-    renderFlow(result);
-    renderArms(result.arms);
-    logCommand(result.parse.text, result.timings.total_ms);
-    renderTwin(result.twin);
+    const head = await response.json();
+
+    const { verb, part, source } = head.parse;
+    $("heard").textContent = `${source} \u2192 ${verb}${part ? " \u00b7 " + part : " \u00b7 no part"}`;
+    flowHead(head.parse, head.timings.parse_ms);
+    renderTwin(head.twin);
+
+    const answers = [null, null, null];
+    let twinState = head.twin;
+
+    await Promise.all(
+      [0, 1, 2].map(async (index) => {
+        const answer = await arm(index);
+        answers[index] = answer.arm;
+        if (index === 2) {
+          twinState = answer.twin;
+          renderTwin(twinState);
+        }
+        renderArm(answer.arm);
+      }),
+    );
+
+    renderFlow({
+      parse: head.parse,
+      timings: { parse_ms: head.timings.parse_ms, arms: answers.map((a) => a.ms) },
+      twin: twinState,
+    });
+    logCommand(head.parse.text, performance.now() - began);
+    renderTwin(twinState);
   } catch (error) {
-    clearInterval(ticker);
     $("heard").textContent = `failed: ${error.message}`;
     $("flow").dataset.busy = "false";
     resetBays();
   } finally {
+    clearInterval(ticker);
     setBusy(false);
   }
 }

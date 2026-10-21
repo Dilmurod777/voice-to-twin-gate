@@ -1,15 +1,15 @@
 """The demo server: one in-memory aircraft, three validators per command.
 
-The gate is the system of record. The other two arms are counterfactuals on the same
-state: they answer what would have happened, and the twin only moves when the gate says
-so. Each arm also reports the state it would have left behind, so its 3D view can show
-what it would have done rather than describe it.
+A command is answered in two calls so the three approaches can finish independently:
+`POST /api/command` parses once and freezes the aircraft state, then each
+`POST /api/arm/{i}` decides its own arm against that same snapshot and returns on its own.
+Only arm 2 — the gate — ever changes the real twin.
 """
 
 from pathlib import Path
 from time import perf_counter
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -46,47 +46,21 @@ class Session:
 
     def reset(self) -> None:
         self.twin = Twin(step=1)
+        self.pending: dict | None = None
 
-    def run(self, text: str) -> dict:
+    def prepare(self, text: str) -> dict:
+        """Parse once and freeze the state the three arms will argue about."""
         started = perf_counter()
         action, source = parse(text, ACTIONS)
         parse_ms = (perf_counter() - started) * 1000
 
-        key = f"{action.verb}|{action.part}"
-        spec = ACTIONS.get(key)
-
-        arms, timings = [], []
-        for index, (name, tagline, decide) in enumerate(ARMS):
-            at = perf_counter()
-            decision = decide(
-                action=action, twin=self.twin, actions=ACTIONS, steps=STEPS, tree=TREE
-            )
-            timings.append(round((perf_counter() - at) * 1000, 2))
-
-            moves = (
-                decision.status is Status.ADMIT
-                and bool(spec)
-                and spec.get("mutates", True)
-            )
-            arms.append(
-                {
-                    "name": name,
-                    "tagline": tagline,
-                    "status": decision.status.value,
-                    "code": decision.code,
-                    "message": decision.message,
-                    "moves": moves,
-                    "focus": action.part,
-                    "blocker": decision.blocker,
-                    "note": self._note(decision, moves),
-                    "trace": self._trace(index, action),
-                    "after": self._after(spec) if moves else sorted(self.twin.state),
-                    "ms": timings[-1],
-                }
-            )
-
-        if arms[-1]["moves"]:
-            self.twin.apply(action, spec)
+        self.pending = {
+            "action": action,
+            "source": source,
+            "text": text,
+            "twin": Twin(step=self.twin.step, state=set(self.twin.state)),
+            "applied": False,
+        }
 
         return {
             "parse": {
@@ -95,41 +69,78 @@ class Session:
                 "source": source,
                 "text": text,
             },
-            "arms": arms,
             "twin": self.state(),
-            "timings": {
-                "parse_ms": round(parse_ms, 1),
-                "arms": timings,
-                "total_ms": round(parse_ms + sum(timings), 1),
-            },
+            "timings": {"parse_ms": round(parse_ms, 1)},
         }
 
-    def _trace(self, index: int, action: Action) -> list[dict]:
-        """What each component of this arm produced, so the page can show the pipeline."""
+    def arm(self, index: int) -> dict:
+        if self.pending is None:
+            raise HTTPException(status_code=409, detail="no command in flight")
+
+        pending = self.pending
+        action: Action = pending["action"]
+        twin: Twin = pending["twin"]  # every arm reads the same frozen state
         spec = ACTIONS.get(f"{action.verb}|{action.part}")
-        rows = [
-            {"stage": "parse", "value": f"{action.verb} · {action.part or 'no part'}"}
-        ]
+
+        started = perf_counter()
+        decision = ARMS[index][2](
+            action=action, twin=twin, actions=ACTIONS, steps=STEPS, tree=TREE
+        )
+        elapsed = round((perf_counter() - started) * 1000, 2)
+
+        moves = (
+            decision.status is Status.ADMIT and bool(spec) and spec.get("mutates", True)
+        )
+        if index == 2 and moves and not pending["applied"]:
+            self.twin.apply(action, spec)
+            pending["applied"] = True
+
+        return {
+            "arm": {
+                "index": index,
+                "name": ARMS[index][0],
+                "tagline": ARMS[index][1],
+                "status": decision.status.value,
+                "code": decision.code,
+                "message": decision.message,
+                "moves": moves,
+                "focus": action.part,
+                "blocker": decision.blocker,
+                "note": self._note(decision, moves),
+                "after": self._after(spec, twin) if moves else sorted(twin.state),
+                "ms": elapsed,
+                "trace": self._trace(index, action, twin),
+            },
+            "twin": self.state(),
+        }
+
+    def _trace(self, index: int, action: Action, twin: Twin) -> list[dict]:
+        """The stages this arm actually ran, with the value each one produced."""
+        if not action.part:
+            return [
+                {"stage": "parse", "value": f"{action.verb} · no part", "state": "fail"}
+            ]
+
+        spec = ACTIONS.get(f"{action.verb}|{action.part}")
+        rows = [{"stage": "parse", "value": f"{action.verb} · {action.part}"}]
 
         if index == 0:
-            state = "pass" if spec else "fail"
             rows.append(
                 {
                     "stage": "execute",
-                    "value": "no check" if spec else "no such action",
-                    "state": state,
+                    "value": f"{action.verb}({action.part})"
+                    if spec
+                    else "no such action",
+                    "state": "pass" if spec else "fail",
                 }
             )
             return rows
 
-        found = manual_check.best_step(action, STEPS) if action.part else None
+        found = manual_check.best_step(action, STEPS)
+
         if index == 2:
-            path = trail(action.part, TREE) if action.part else []
-            ok, why = (
-                reachable(action.part, TREE, self.twin.state)
-                if action.part
-                else (False, "no part")
-            )
+            path = trail(action.part, TREE)
+            ok, why = reachable(action.part, TREE, twin.state)
             rows.append(
                 {
                     "stage": "hierarchy",
@@ -148,11 +159,11 @@ class Session:
                 "state": "pass" if found else "fail",
             }
         )
-        if found and found != self.twin.step:
+        if found and found != twin.step:
             rows.append(
                 {
                     "stage": "stopped",
-                    "value": f"manual is at step {self.twin.step}",
+                    "value": f"manual is at step {twin.step}",
                     "state": "fail",
                 }
             )
@@ -160,12 +171,12 @@ class Session:
 
         if index == 2 and spec:
             missing = [
-                flag for flag in spec.get("requires", []) if flag not in self.twin.state
+                flag for flag in spec.get("requires", []) if flag not in twin.state
             ]
             rows.append(
                 {
                     "stage": "state",
-                    "value": "needs " + " and ".join(missing)
+                    "value": ("needs " + " and ".join(missing))
                     if missing
                     else "preconditions hold",
                     "state": "fail" if missing else "pass",
@@ -173,9 +184,10 @@ class Session:
             )
         return rows
 
-    def _after(self, spec: dict) -> list[str]:
+    @staticmethod
+    def _after(spec: dict, twin: Twin) -> list[str]:
         """The state this action would leave behind, without touching the real twin."""
-        state = set(self.twin.state)
+        state = set(twin.state)
         if spec.get("sets"):
             state.add(spec["sets"])
         state.difference_update(spec.get("clears", []))
@@ -213,9 +225,9 @@ class Session:
                 {
                     "n": n,
                     "text": text,
-                    "command": self._command(n),
                     "done": n < self.twin.step,
                     "current": n == self.twin.step,
+                    "command": self._command(n),
                 }
                 for n, text in STEPS.items()
             ],
@@ -232,7 +244,14 @@ session = Session()
 
 @app.post("/api/command")
 def command(body: Command) -> dict:
-    return session.run(body.text.strip())
+    return session.prepare(body.text.strip())
+
+
+@app.post("/api/arm/{index}")
+def arm(index: int) -> dict:
+    if not 0 <= index < len(ARMS):
+        raise HTTPException(status_code=404, detail="no such arm")
+    return session.arm(index)
 
 
 @app.get("/api/state")
