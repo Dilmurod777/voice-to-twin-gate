@@ -35,7 +35,12 @@ const BAYS = [
 const $ = (id) => document.getElementById(id);
 const esc = (text) =>
   String(text).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
-const ms = (value) => (value < 10 ? `${value.toFixed(2)} ms` : `${Math.round(value)} ms`);
+const ms = (value) =>
+  value < 0.1
+    ? `${Math.round(value * 1000)} µs`
+    : value < 10
+      ? `${value.toFixed(2)} ms`
+      : `${Math.round(value)} ms`;
 
 let busy = false;
 const HISTORY = [];
@@ -89,7 +94,7 @@ function renderArm(arm) {
   bay.querySelector(".trace").innerHTML = (arm.trace || [])
     .map(
       (row) =>
-        `<li data-state="${row.state || "pass"}"><b>${esc(row.stage)}</b><span>${esc(row.value)}</span></li>`,
+        `<li data-state="${row.state || "pass"}" data-shared="${row.stage === "parse"}"><b>${esc(row.stage)}</b><span>${esc(row.value)}</span><em>${ms(row.ms || 0)}</em></li>`,
     )
     .join("");
   window.twinViews?.[arm.index]?.show(arm);
@@ -345,3 +350,69 @@ idleFlow();
 fetch("/api/state")
   .then((response) => response.json())
   .then(renderTwin);
+
+let recorder = null;
+let chunks = [];
+
+async function toggleMic() {
+  const button = $("mic");
+  if (recorder && recorder.state === "recording") {
+    recorder.stop();
+    return;
+  }
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  } catch {
+    $("heard").textContent = "no microphone permission";
+    return;
+  }
+  chunks = [];
+  recorder = new MediaRecorder(stream, { mimeType: "audio/webm" });
+  recorder.ondataavailable = (event) => chunks.push(event.data);
+  recorder.onstop = async () => {
+    stream.getTracks().forEach((track) => track.stop());
+    button.dataset.rec = "false";
+    button.textContent = "rec";
+    $("heard").textContent = "transcribing the clip";
+    const audio = new Blob(chunks, { type: "audio/webm" });
+    try {
+      const buffer = await new AudioContext().decodeAudioData(await audio.arrayBuffer());
+      const rate = 16000;
+      const off = new OfflineAudioContext(1, Math.ceil(buffer.duration * rate), rate);
+      const source = off.createBufferSource();
+      source.buffer = buffer;
+      source.connect(off.destination);
+      source.start();
+      const pcm = (await off.startRendering()).getChannelData(0);
+      const response = await fetch("/api/transcribe", {
+        method: "POST",
+        headers: { "Content-Type": "application/octet-stream" },
+        body: pcm,
+      });
+      if (!response.ok) throw new Error(`server ${response.status}`);
+      const { text, ms: took } = await response.json();
+      const said = text.trim();
+      if (!said) {
+        $("heard").textContent = "nothing heard";
+        return;
+      }
+      $("cmd").value = said;
+      await send(said);
+      $("heard").textContent = `whisper ${ms(took)} → ${$("heard").textContent}`;
+      const cell = document.querySelector("#flow .flow-cell .v");
+      if (cell) cell.textContent = `“${said}” · whisper ${ms(took)}`;
+    } catch (error) {
+      $("heard").textContent = `transcription failed: ${error.message}`;
+    }
+  };
+  recorder.start();
+  button.dataset.rec = "true";
+  button.textContent = "stop";
+  $("heard").textContent = "recording — click stop";
+  setTimeout(() => {
+    if (recorder && recorder.state === "recording") recorder.stop();
+  }, 7000);
+}
+
+$("mic").addEventListener("click", toggleMic);

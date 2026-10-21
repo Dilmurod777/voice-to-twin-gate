@@ -6,9 +6,10 @@ is the gap the 2026 approach is about.
 """
 
 import re
+from time import perf_counter
 
 from app.gate import refuse
-from app.schema import Action, Decision, Status
+from app.schema import Action, Decision, Status, Step
 
 
 def _tokens(text: str) -> set[str]:
@@ -34,26 +35,39 @@ def best_step(action: Action, steps: dict[int, str]) -> int | None:
 
 
 def decide(action: Action, twin, steps: dict[int, str], **_):
-    if action.part is None:
-        return refuse(action, "AMBIGUOUS_REFERENCE", "which part do you mean?")
+    started = perf_counter()
+    step = best_step(action, steps) if action.part else None
+    spent = round((perf_counter() - started) * 1000, 3)
 
-    step = best_step(action, steps)
     if step is None:
-        return refuse(
+        return refusal(
             action,
-            "NOT_IN_MANUAL",
-            f"the manual has no instruction for '{action.verb} {action.part}'",
+            "NOT_IN_MANUAL" if action.part else "AMBIGUOUS_REFERENCE",
+            f"the manual has no instruction for '{action.verb} {action.part or '…'}'",
+            Step(stage="manual", value="no instruction", state="fail", ms=spent),
         )
     if step != twin.step:
-        return refuse(
+        return refusal(
             action,
             "OUT_OF_SEQUENCE",
             f"manual is at step {twin.step}; that instruction is step {step}",
+            Step(
+                stage="manual",
+                value=f"step {step}, manual is at {twin.step}",
+                state="fail",
+                ms=spent,
+            ),
         )
-
     return Decision(
         status=Status.ADMIT,
         code="OK",
         message=f"matches manual step {step}",
         action=action,
+        trace=[Step(stage="manual", value=f"step {step}", ms=spent)],
     )
+
+
+def refusal(action: Action, code: str, message: str, step: Step) -> Decision:
+    decision = refuse(action, code, message)
+    decision.trace = [step]
+    return decision

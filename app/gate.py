@@ -15,21 +15,14 @@ def check_state(
     for flag in spec.get("requires", []):
         if flag not in twin.state:
             blocked = spec["blocked"][flag]
-            return Decision(
-                status=Status.REFUSE,
-                code="NOT_READY",
-                message=blocked["message"],
-                action=action,
-                blocker=blocked["node"],
-            )
+            return refuse(action, "NOT_READY", blocked["message"], blocked.get("node"))
 
     allowed = spec.get("procedure_steps", [])
     if allowed and twin.step not in allowed:
-        return Decision(
-            status=Status.REFUSE,
-            code="OUT_OF_SEQUENCE",
-            message=f"procedure is at step {twin.step} ({steps[twin.step]}); this action is step {allowed[0]}",
-            action=action,
+        return refuse(
+            action,
+            "OUT_OF_SEQUENCE",
+            f"procedure is at step {twin.step} ({steps[twin.step]}); this action is step {allowed[0]}",
         )
 
     return Decision(

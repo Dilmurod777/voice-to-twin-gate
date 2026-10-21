@@ -1,23 +1,24 @@
 """The demo server: one in-memory aircraft, three validators per command.
 
-A command is answered in two calls so the three approaches can finish independently:
-`POST /api/command` parses once and freezes the aircraft state, then each
-`POST /api/arm/{i}` decides its own arm against that same snapshot and returns on its own.
-Only arm 2 — the gate — ever changes the real twin.
+A command is parsed once and the aircraft is frozen into a snapshot; each arm then answers
+on its own request against that snapshot, so a slow arm cannot hold up a fast one. Only
+the 2026 arm moves the real twin.
 """
 
 from pathlib import Path
 from time import perf_counter
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.concurrency import run_in_threadpool
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from app import asr
 from app.approaches import context_gate, llm_only, manual_check
 from app.llm import parse
 from app.policy import load_actions, load_manual
-from app.schema import Action, Decision, Status
-from app.twin import Twin, load_hierarchy, reachable, trail
+from app.schema import Action, Decision, Status, Step
+from app.twin import Twin, load_hierarchy
 
 WEB = Path(__file__).resolve().parent.parent / "web"
 ACTIONS, STEPS, TREE = load_actions(), load_manual(), load_hierarchy()
@@ -49,19 +50,17 @@ class Session:
         self.pending: dict | None = None
 
     def prepare(self, text: str) -> dict:
-        """Parse once and freeze the state the three arms will argue about."""
         started = perf_counter()
         action, source = parse(text, ACTIONS)
-        parse_ms = (perf_counter() - started) * 1000
-
+        parse_ms = round((perf_counter() - started) * 1000, 1)
         self.pending = {
             "action": action,
             "source": source,
             "text": text,
             "twin": Twin(step=self.twin.step, state=set(self.twin.state)),
             "applied": False,
+            "parse_ms": parse_ms,
         }
-
         return {
             "parse": {
                 "verb": action.verb,
@@ -70,7 +69,7 @@ class Session:
                 "text": text,
             },
             "twin": self.state(),
-            "timings": {"parse_ms": round(parse_ms, 1)},
+            "timings": {"parse_ms": parse_ms},
         }
 
     def arm(self, index: int) -> dict:
@@ -79,21 +78,38 @@ class Session:
 
         pending = self.pending
         action: Action = pending["action"]
-        twin: Twin = pending["twin"]  # every arm reads the same frozen state
-        spec = ACTIONS.get(f"{action.verb}|{action.part}")
-
         started = perf_counter()
-        decision = ARMS[index][2](
-            action=action, twin=twin, actions=ACTIONS, steps=STEPS, tree=TREE
+        decision: Decision = ARMS[index][2](
+            action=action, twin=pending["twin"], actions=ACTIONS, steps=STEPS, tree=TREE
         )
-        elapsed = round((perf_counter() - started) * 1000, 2)
+        ms = round((perf_counter() - started) * 1000, 3)
 
+        spec = ACTIONS.get(f"{action.verb}|{action.part}")
         moves = (
             decision.status is Status.ADMIT and bool(spec) and spec.get("mutates", True)
         )
+
         if index == 2 and moves and not pending["applied"]:
             self.twin.apply(action, spec)
             pending["applied"] = True
+
+        rows = [
+            Step(
+                stage="parse",
+                value=f"{action.verb} · {action.part or 'no part'}",
+                ms=pending["parse_ms"],
+            ),
+            *decision.trace,
+        ]
+        overhead = max(ms - sum(row.ms for row in rows), 0)
+        rows.append(
+            Step(
+                stage="decision",
+                value=f"{decision.status.value} · {decision.code}",
+                state="pass" if decision.status is Status.ADMIT else "fail",
+                ms=round(overhead, 3),
+            )
+        )
 
         return {
             "arm": {
@@ -107,82 +123,14 @@ class Session:
                 "focus": action.part,
                 "blocker": decision.blocker,
                 "note": self._note(decision, moves),
-                "after": self._after(spec, twin) if moves else sorted(twin.state),
-                "ms": elapsed,
-                "trace": self._trace(index, action, twin),
+                "after": self._after(spec, pending["twin"])
+                if moves
+                else sorted(pending["twin"].state),
+                "ms": ms,
+                "trace": [row.model_dump() for row in rows],
             },
             "twin": self.state(),
         }
-
-    def _trace(self, index: int, action: Action, twin: Twin) -> list[dict]:
-        """The stages this arm actually ran, with the value each one produced."""
-        if not action.part:
-            return [
-                {"stage": "parse", "value": f"{action.verb} · no part", "state": "fail"}
-            ]
-
-        spec = ACTIONS.get(f"{action.verb}|{action.part}")
-        rows = [{"stage": "parse", "value": f"{action.verb} · {action.part}"}]
-
-        if index == 0:
-            rows.append(
-                {
-                    "stage": "execute",
-                    "value": f"{action.verb}({action.part})"
-                    if spec
-                    else "no such action",
-                    "state": "pass" if spec else "fail",
-                }
-            )
-            return rows
-
-        found = manual_check.best_step(action, STEPS)
-
-        if index == 2:
-            path = trail(action.part, TREE)
-            ok, why = reachable(action.part, TREE, twin.state)
-            rows.append(
-                {
-                    "stage": "hierarchy",
-                    "value": " › ".join(path) or "not on the twin",
-                    "state": "pass" if ok else "fail",
-                }
-            )
-            if not ok:
-                rows.append({"stage": "stopped", "value": why, "state": "fail"})
-                return rows
-
-        rows.append(
-            {
-                "stage": "manual",
-                "value": f"step {found}" if found else "no instruction",
-                "state": "pass" if found else "fail",
-            }
-        )
-        if found and found != twin.step:
-            rows.append(
-                {
-                    "stage": "stopped",
-                    "value": f"manual is at step {twin.step}",
-                    "state": "fail",
-                }
-            )
-            return rows
-
-        if index == 2 and spec:
-            missing = [
-                flag for flag in spec.get("requires", []) if flag not in twin.state
-            ]
-            rows.append(
-                {
-                    "stage": "state",
-                    "value": ("needs " + " and ".join(missing))
-                    if missing
-                    else "preconditions hold",
-                    "state": "fail" if missing else "pass",
-                }
-            )
-        return rows
 
     @staticmethod
     def _after(spec: dict, twin: Twin) -> list[str]:
@@ -263,6 +211,16 @@ def state() -> dict:
 def reset() -> dict:
     session.reset()
     return session.state()
+
+
+@app.post("/api/transcribe")
+async def transcribe(request: Request) -> dict:
+    audio = await request.body()
+    if len(audio) < 800:
+        raise HTTPException(422, "no audio")
+    started = perf_counter()
+    text = await run_in_threadpool(asr.transcribe, audio)
+    return {"text": text, "ms": round((perf_counter() - started) * 1000, 1)}
 
 
 app.mount("/", StaticFiles(directory=WEB, html=True), name="web")
