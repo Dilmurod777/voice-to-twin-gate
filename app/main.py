@@ -2,10 +2,12 @@
 
 The gate is the system of record. The other two arms are counterfactuals on the same
 state: they answer what would have happened, and the twin only moves when the gate says
-so.
+so. Each arm also reports the state it would have left behind, so its 3D view can show
+what it would have done rather than describe it.
 """
 
 from pathlib import Path
+from time import perf_counter
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
@@ -14,7 +16,7 @@ from pydantic import BaseModel
 from app.approaches import context_gate, llm_only, manual_check
 from app.llm import parse
 from app.policy import load_actions, load_manual
-from app.schema import Action, Status
+from app.schema import Action, Decision, Status
 from app.twin import Twin, load_hierarchy
 
 WEB = Path(__file__).resolve().parent.parent / "web"
@@ -27,6 +29,17 @@ ARMS = [
 ]
 
 
+def label(node_id: str, tree: dict | None = None) -> str:
+    tree = tree or TREE
+    if tree["id"] == node_id:
+        return tree["label"]
+    for child in tree.get("children", []):
+        found = label(node_id, child)
+        if found:
+            return found
+    return ""
+
+
 class Session:
     def __init__(self) -> None:
         self.reset()
@@ -35,14 +48,25 @@ class Session:
         self.twin = Twin(step=1)
 
     def run(self, text: str) -> dict:
+        started = perf_counter()
         action, source = parse(text, ACTIONS)
+        parse_ms = (perf_counter() - started) * 1000
+
         key = f"{action.verb}|{action.part}"
         spec = ACTIONS.get(key)
 
-        arms = []
+        arms, timings = [], []
         for name, tagline, decide in ARMS:
+            at = perf_counter()
             decision = decide(
                 action=action, twin=self.twin, actions=ACTIONS, steps=STEPS, tree=TREE
+            )
+            timings.append(round((perf_counter() - at) * 1000, 2))
+
+            moves = (
+                decision.status is Status.ADMIT
+                and bool(spec)
+                and spec.get("mutates", True)
             )
             arms.append(
                 {
@@ -51,9 +75,11 @@ class Session:
                     "status": decision.status.value,
                     "code": decision.code,
                     "message": decision.message,
-                    "moves": decision.status is Status.ADMIT
-                    and bool(spec)
-                    and spec.get("mutates", True),
+                    "moves": moves,
+                    "focus": action.part,
+                    "blocker": decision.blocker,
+                    "note": self._note(decision, moves),
+                    "after": self._after(spec) if moves else sorted(self.twin.state),
                 }
             )
 
@@ -69,7 +95,32 @@ class Session:
             },
             "arms": arms,
             "twin": self.state(),
+            "timings": {"parse_ms": round(parse_ms, 1), "arms": timings},
         }
+
+    def _after(self, spec: dict) -> list[str]:
+        """The state this action would leave behind, without touching the real twin."""
+        state = set(self.twin.state)
+        if spec.get("sets"):
+            state.add(spec["sets"])
+        state.difference_update(spec.get("clears", []))
+        return sorted(state)
+
+    @staticmethod
+    def _note(decision: Decision, moves: bool) -> str:
+        if moves:
+            return "the action runs on the twin"
+        if decision.status is Status.ADMIT:
+            return "read-only: the twin does not change"
+        if decision.blocker:
+            return f"{label(decision.blocker)} is in the way"
+        if decision.code in {"OUT_OF_SEQUENCE", "NOT_IN_MANUAL"}:
+            return "the part is marked; nothing moves"
+        if decision.code == "UNKNOWN_PART":
+            return "there is no such part on the twin"
+        if decision.code == "AMBIGUOUS_REFERENCE":
+            return "nothing to point at"
+        return "nothing moves"
 
     def state(self) -> dict:
         return {

@@ -20,3 +20,5 @@ class Decision(BaseModel):
     code: str
     message: str
     action: Action
+    # The node that is actually in the way, when the refusal is about the aircraft.
+    blocker: str | None = None

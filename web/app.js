@@ -35,51 +35,115 @@ const FLAGS = [
   ["hydraulic_pump_removed", "pump out"],
 ];
 
-const $ = (id) => document.getElementById(id);
+const BAYS = [
+  ["LLM only", "executes the parse"],
+  ["Manual check · 2023", "the manual, and only the manual"],
+  ["Context gate · 2026", "manual + 3D hierarchy + state"],
+];
 
-function idle() {
-  const blank = [
-    ["LLM only", "executes the parse"],
-    ["Manual check · 2023", "the manual, and only the manual"],
-    ["Context gate · 2026", "manual + 3D hierarchy + state"],
-  ];
-  $("verdicts").innerHTML = blank
-    .map(
-      ([name, tag]) => `
-      <article class="bay" data-status="idle">
-        <p class="name">${name}</p>
-        <p class="tag">${tag}</p>
-        <p class="verdict">—</p>
-        <p class="code">waiting</p>
-        <p class="msg">Send a command to see what each arm does with it.</p>
-        <p class="foot"></p>
-      </article>`,
-    )
+const $ = (id) => document.getElementById(id);
+const esc = (text) =>
+  String(text).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+const ms = (value) => (value < 10 ? `${value.toFixed(2)} ms` : `${Math.round(value)} ms`);
+
+function buildBays() {
+  $("verdicts").innerHTML = BAYS.map(
+    ([name, tag]) => `
+    <article class="bay" data-status="idle">
+      <p class="name">${name}</p>
+      <p class="tag">${tag}</p>
+      <p class="verdict">—</p>
+      <p class="code">waiting</p>
+      <p class="msg">Send a command to see what each arm does with it.</p>
+      <figure class="view"><canvas></canvas><figcaption class="veil">the twin</figcaption></figure>
+      <p class="foot"></p>
+    </article>`,
+  ).join("");
+}
+
+function resetBays() {
+  for (const bay of document.querySelectorAll(".bay")) {
+    bay.dataset.status = "idle";
+    bay.querySelector(".verdict").textContent = "—";
+    bay.querySelector(".code").textContent = "waiting";
+    bay.querySelector(".msg").textContent = "Send a command to see what each arm does with it.";
+    bay.querySelector(".veil").textContent = "the twin";
+    bay.querySelector(".foot").textContent = "";
+  }
+}
+
+function flowCells(cells, busy) {
+  const flow = $("flow");
+  flow.dataset.busy = busy ? "true" : "false";
+  flow.innerHTML = cells
+    .map(([key, value]) => `<div class="flow-cell"><span class="k">${key}</span><span class="v">${esc(value)}</span></div>`)
     .join("");
 }
 
+function idleFlow() {
+  flowCells(
+    [["command", "—"], ["parse", "—"], ["three validators", "—"], ["twin", "—"]],
+    false,
+  );
+}
+
+function busyFlow(text) {
+  flowCells(
+    [["command", text], ["parse", "reading"], ["three validators", "waiting"], ["twin", "unchanged"]],
+    true,
+  );
+}
+
+function setBusy(on, text) {
+  $("verdicts").dataset.busy = on ? "true" : "false";
+  $("cmd").disabled = on;
+  $("cmd-form").querySelector("button").disabled = on;
+  $("cmd-form").querySelector("button").textContent = on ? "running" : "run";
+  if (!on) return;
+  busyFlow(text);
+  for (const bay of document.querySelectorAll(".bay")) {
+    bay.dataset.status = "loading";
+    bay.querySelector(".verdict").textContent = "…";
+    bay.querySelector(".code").textContent = "reading the command";
+    bay.querySelector(".msg").textContent = "The parser is the slow part. The validators take microseconds.";
+    bay.querySelector(".veil").textContent = "waiting for the parser";
+    bay.querySelector(".foot").textContent = "";
+  }
+}
+
 function renderArms(arms) {
-  $("verdicts").innerHTML = arms
-    .map(
-      (arm) => `
-      <article class="bay" data-status="${arm.status}">
-        <p class="name">${arm.name}</p>
-        <p class="tag">${arm.tagline}</p>
-        <p class="verdict">${arm.status}</p>
-        <p class="code">${arm.code}</p>
-        <p class="msg">${arm.message}</p>
-        <p class="foot">${
-          arm.moves
-            ? "moves the twin"
-            : arm.status !== "ADMIT"
-              ? "nothing moves"
-              : arm.code === "READ_ONLY_OK"
-                ? "read-only"
-                : "no matching action"
-        }</p>
-      </article>`,
-    )
-    .join("");
+  window.lastArms = arms;
+  document.querySelectorAll(".bay").forEach((bay, index) => {
+    const arm = arms[index];
+    if (!arm) return;
+    bay.dataset.status = arm.status;
+    bay.querySelector(".verdict").textContent = arm.status;
+    bay.querySelector(".code").textContent = arm.code;
+    bay.querySelector(".msg").textContent = arm.message;
+    bay.querySelector(".veil").textContent = arm.note;
+    bay.querySelector(".foot").textContent = arm.moves
+      ? "moves the twin"
+      : arm.status !== "ADMIT"
+        ? "nothing moves"
+        : arm.code === "READ_ONLY_OK"
+          ? "read-only"
+          : "no matching action";
+    window.twinViews?.[index]?.show(arm);
+  });
+}
+
+function renderFlow(result) {
+  const { parse, timings, twin } = result;
+  const spent = timings.arms.reduce((total, value) => total + value, 0);
+  flowCells(
+    [
+      ["command", parse.text],
+      ["parse", `${parse.source} · ${ms(timings.parse_ms)}`],
+      ["three validators", `3 arms · ${ms(spent)}`],
+      ["twin", `step ${twin.step} / ${twin.total}`],
+    ],
+    false,
+  );
 }
 
 function renderTwin(twin) {
@@ -110,8 +174,12 @@ function renderTwin(twin) {
     </div>`;
 }
 
+let busy = false;
+
 async function send(text) {
-  $("heard").textContent = "reading…";
+  if (busy) return;
+  busy = true;
+  setBusy(true, text);
   try {
     const response = await fetch("/api/command", {
       method: "POST",
@@ -123,9 +191,14 @@ async function send(text) {
     const { verb, part, source } = result.parse;
     $("heard").textContent = `${source} → ${verb}${part ? " · " + part : " · no part"}`;
     renderArms(result.arms);
+    renderFlow(result);
     renderTwin(result.twin);
   } catch (error) {
     $("heard").textContent = `failed: ${error.message}`;
+    idleFlow();
+  } finally {
+    busy = false;
+    setBusy(false);
   }
 }
 
@@ -155,13 +228,16 @@ $("cmd-form").addEventListener("submit", (event) => {
 $("reset").addEventListener("click", async () => {
   const twin = await (await fetch("/api/reset", { method: "POST" })).json();
   renderTwin(twin);
-  idle();
+  resetBays();
+  idleFlow();
+  window.twinViews?.forEach((view) => view.show({}));
   $("heard").textContent = "nothing yet";
   $("cmd").value = "";
 });
 
+buildBays();
 buildGroups();
-idle();
+idleFlow();
 fetch("/api/state")
   .then((response) => response.json())
   .then(renderTwin);

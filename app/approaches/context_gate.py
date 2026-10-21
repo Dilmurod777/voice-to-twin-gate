@@ -10,7 +10,7 @@ Order matters, and each layer answers a different question:
 from app.approaches import manual_check
 from app.gate import check_state, refuse
 from app.schema import Action, Decision, Status
-from app.twin import reachable
+from app.twin import blocker, reachable
 
 
 def decide(
@@ -31,7 +31,10 @@ def decide(
     ok, why = reachable(action.part, tree, twin.state)
     if not ok:
         return refuse(
-            action, "UNKNOWN_PART" if "hierarchy" in why else "NOT_ACCESSIBLE", why
+            action,
+            "UNKNOWN_PART" if "hierarchy" in why else "NOT_ACCESSIBLE",
+            why,
+            blocker=blocker(action.part, tree, twin.state),
         )
 
     if spec is None:

@@ -37,6 +37,17 @@ def reachable(part: str, tree: dict, state: set[str]) -> tuple[bool, str]:
     return True, ""
 
 
+def blocker(part: str, tree: dict, state: set[str]) -> str | None:
+    """The closed door standing between the user and the part, if there is one."""
+    path = _path_to(part, tree)
+    if path is None:
+        return None
+    for node in path[:-1]:
+        if node.get("door") and f"{node['id']}_open" not in state:
+            return node["id"]
+    return None
+
+
 @dataclass
 class Twin:
     step: int
