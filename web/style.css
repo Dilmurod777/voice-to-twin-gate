@@ -730,3 +730,33 @@ input:disabled { opacity: 0.65; }
   .score { width: 100%; }
   .lane-head, .lane { grid-template-columns: 72px minmax(0, 1fr); }
 }
+/* lanes: one number per row, one colour per arm */
+.lane-head, .lane { grid-template-columns: 96px minmax(0, 1fr) 52px; }
+
+.hit-head {
+  text-align: right;
+  font: 400 9px/1.4 var(--mono);
+  color: #666e7b;
+}
+
+.hit {
+  text-align: right;
+  font: 500 11px/1.4 var(--mono);
+  color: var(--dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.lane[data-arm="0"] .pipe span { color: #d98d7e; border-color: #5d403a; }
+.lane[data-arm="1"] .pipe span { color: var(--amber); border-color: #5d4b2b; }
+.lane[data-arm="2"] .pipe span { color: #7fc09c; border-color: #33513e; }
+.lane[data-arm="0"] .hit { color: #d98d7e; }
+.lane[data-arm="1"] .hit { color: var(--amber); }
+.lane[data-arm="2"] .hit { color: #7fc09c; }
+
+/* play button: one height, whatever the command wraps to */
+.cmd-row { align-items: flex-start; }
+.play { height: 26px; align-self: flex-start; }
+
+@media (max-width: 980px) {
+  .lane-head, .lane { grid-template-columns: 64px minmax(0, 1fr) 44px; }
+}
