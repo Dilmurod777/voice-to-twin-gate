@@ -75,3 +75,16 @@
   label: show the engine cowl
   mutates: false
   admit: "read-only view"
+
+# Housekeeping: changes the aircraft, belongs to no step, and the manual says nothing about
+# it. Without it, a panel once opened could never be closed again, and the 3D check could
+# never fire in play.
+- verb: close_panel
+  part: access_panel
+  label: close the access panel
+  mutates: true
+  sets: null
+  clears: [access_panel_open]
+  manual: false
+  procedure_steps: []
+  admit: "panel 12A closed"

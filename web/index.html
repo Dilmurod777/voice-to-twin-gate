@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>voice-to-twin-gate</title>
+    <link
+      rel="icon"
+      href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='16' fill='%23171a1f'/><path d='M3 11h10' stroke='%23d3a34a' stroke-width='2'/></svg>"
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <header class="bar">
+      <div class="brand">
+        <h1>voice-to-twin-gate</h1>
+        <p>one command, three validators</p>
+      </div>
+      <div class="hud" id="hud"></div>
+    </header>
+
+    <main class="board">
+      <aside class="rail">
+        <form id="cmd-form" autocomplete="off">
+          <label for="cmd">say or type a command</label>
+          <div class="entry">
+            <input id="cmd" name="cmd" placeholder="open the fuel valve" spellcheck="false" />
+            <button type="submit">run</button>
+          </div>
+        </form>
+
+        <p class="heard" id="heard">nothing yet</p>
+
+        <div class="groups" id="groups"></div>
+
+        <button class="reset" id="reset" type="button">reset the aircraft</button>
+      </aside>
+
+      <section class="stage">
+        <div class="verdicts" id="verdicts"></div>
+        <div class="twin" id="twin"></div>
+      </section>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
+</html>

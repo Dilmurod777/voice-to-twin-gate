@@ -117,7 +117,12 @@ def test_llm_only_admits_everything_it_is_given():
 
 
 @pytest.mark.parametrize(
-    "key", [k for k, v in ACTIONS.items() if v.get("mutates", True)]
+    "key",
+    [
+        k
+        for k, v in ACTIONS.items()
+        if v.get("mutates", True) and v.get("manual") is not False
+    ],
 )
 def test_both_arms_agree_on_which_step_an_action_belongs_to(key):
     """The manual the 2023 arm reads and the policy the 2026 arm enforces must not drift."""
@@ -137,8 +142,39 @@ def test_every_action_has_a_home_in_the_hierarchy(key):
 @pytest.mark.parametrize(
     "key", [k for k, v in ACTIONS.items() if v.get("mutates", True)]
 )
-def test_every_mutating_action_declares_what_it_sets(key):
-    assert ACTIONS[key]["sets"]
+def test_every_mutating_action_declares_its_effect(key):
+    spec = ACTIONS[key]
+
+    assert spec.get("sets") or spec.get("clears")
+
+
+def test_closing_the_panel_makes_the_system_unreachable():
+    twin_state = twin(2, "access_panel_open")
+    twin_state.apply(
+        Action(verb="close_panel", part="access_panel"),
+        ACTIONS["close_panel|access_panel"],
+    )
+
+    decision = gate(Action(verb="depressurise", part="fuel_system"), twin_state)
+
+    assert decision.status is Status.REFUSE
+    assert decision.code == "NOT_READY"
+    assert decision.message == "access panel 12A is still closed"
+
+
+def test_closing_the_panel_leaves_the_2023_arm_behind():
+    # The 2023 arm still thinks the step is right; only the hierarchy knows the panel is shut.
+    twin_state = twin(2, "access_panel_open")
+    twin_state.apply(
+        Action(verb="close_panel", part="access_panel"),
+        ACTIONS["close_panel|access_panel"],
+    )
+
+    decision = manual_check.decide(
+        Action(verb="depressurise", part="fuel_system"), twin_state, STEPS
+    )
+
+    assert decision.status is Status.ADMIT
 
 
 def test_gate_refuses_out_of_sequence():

@@ -73,3 +73,15 @@ docs/           plan and decisions
 ## Licence
 
 Code MIT. Audio CC BY 4.0. Models and manuals keep their own terms, credited above.
+
+## Run the demo locally
+
+```nuv venv; uv pip install -e ".[dev]"
+.\.venv\Scripts\python -m uvicorn app.main:app --port 8017
+```
+
+Open http://127.0.0.1:8017 and type a command, or click one of the grouped chips. The
+parse is shown above the three verdicts: `model` when Ollama answered, `keyword` when it
+fall back to the local vocabulary (the page says which, because a lookup table presented as
+a model would be a lie).
+

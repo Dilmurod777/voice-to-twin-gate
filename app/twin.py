@@ -44,6 +44,9 @@ class Twin:
 
     def apply(self, action, spec: dict) -> None:
         """Called only after an ADMIT, and only for actions that mutate."""
-        self.state.add(spec["sets"])
+        if spec.get("sets"):
+            self.state.add(spec["sets"])
+        for flag in spec.get("clears", []):
+            self.state.discard(flag)
         if self.step in spec.get("procedure_steps", []):
             self.step += 1

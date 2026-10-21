@@ -41,6 +41,14 @@ def decide(
             f"the twin has no action for '{action.verb} {action.part}'",
         )
 
+    if spec.get("manual") is False:
+        return Decision(
+            status=Status.ADMIT,
+            code="HOUSEKEEPING",
+            message=spec.get("admit", "not a procedure step"),
+            action=action,
+        )
+
     checked = manual_check.decide(action, twin, steps)
     if checked.status is Status.REFUSE:
         return checked
