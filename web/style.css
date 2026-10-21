@@ -169,7 +169,7 @@ button {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  min-height: calc(100vh - 168px);
+  min-height: calc(100vh - 326px);
 }
 
 .verdicts {
@@ -337,6 +337,7 @@ button {
     order: 5;
   }
   .verdicts { grid-template-columns: 1fr; }
+  .brief { grid-template-columns: 1fr; gap: 12px; }
   .twin { grid-template-columns: 1fr; }
   .bay { min-height: 0; }
 }
@@ -598,9 +599,9 @@ input:disabled { opacity: 0.65; }
 .cmd-row .chip { flex: 1; min-width: 0; margin-bottom: 0; }
 .play {
   flex: none;
-  width: 24px;
+  width: 26px;
   padding: 0;
-  font: 400 8px/1 var(--mono);
+  font: 400 10px/1 var(--mono);
   color: var(--dim);
   background: transparent;
   border: 1px solid var(--line);
@@ -608,3 +609,51 @@ input:disabled { opacity: 0.65; }
 }
 .play:hover,
 .play[data-playing="true"] { color: var(--amber); border-color: var(--amber); }
+/* brief: what this is, and what it scored */
+.brief {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+  gap: 18px 28px;
+  align-items: end;
+  max-width: 1320px;
+  margin: 0 auto;
+  padding: 16px 20px 2px;
+}
+
+.claim {
+  margin: 0;
+  max-width: 52ch;
+  font: 400 15px/1.5 var(--sans);
+  color: #c9ced6;
+}
+
+.score {
+  border-collapse: collapse;
+  font: 400 10.5px/1.5 var(--mono);
+  color: var(--dim);
+}
+
+.score th,
+.score td { padding: 3px 8px; text-align: right; font-weight: 400; }
+
+.score tbody th { text-align: left; color: var(--text); }
+
+.score thead th { color: #666e7b; }
+
+.score tr:last-child th,
+.score tr:last-child td { color: var(--amber); }
+
+.score caption {
+  caption-side: bottom;
+  padding-top: 6px;
+  text-align: left;
+  font: 400 9.5px/1.4 var(--mono);
+  color: #666e7b;
+}
+
+.brief-note {
+  grid-column: 1 / -1;
+  margin: 0;
+  font: 400 10px/1.5 var(--mono);
+  color: #666e7b;
+}

@@ -25,6 +25,29 @@
       <div class="hud" id="hud"></div>
     </header>
 
+<section class="brief">
+  <p class="claim">
+    A language model turns the words into an action. Three validators decide whether it
+    runs — and only the last one checks that action against the aircraft's state and the
+    position of its parts in the model.
+  </p>
+  <table class="score">
+    <caption>24 commands, one recorded parse, three validators — <code>python -m eval.run_eval</code></caption>
+    <thead>
+      <tr><th scope="col"></th><th scope="col">unsafe run</th><th scope="col">valid kept</th><th scope="col">junk refused</th></tr>
+    </thead>
+    <tbody>
+      <tr><th scope="row">LLM only</th><td>13/13</td><td>6/6</td><td>0/5</td></tr>
+      <tr><th scope="row">Manual · 2023</th><td>6/13</td><td>4/6</td><td>4/5</td></tr>
+      <tr><th scope="row">Gate · 2026</th><td>0/13</td><td>6/6</td><td>5/5</td></tr>
+    </tbody>
+  </table>
+  <p class="brief-note">
+    Runs here: the local parse, the manual text, the hierarchy walk and the gate. Staged:
+    Windows TTS voice, a schematic airframe, six hand-written steps, our own part IDs.
+  </p>
+</section>
+
     <main class="board">
       <aside class="rail">
         <form id="cmd-form" autocomplete="off">
