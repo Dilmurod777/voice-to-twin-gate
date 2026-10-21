@@ -123,6 +123,34 @@ function build() {
   gear.add(leg, tyre);
   add("landing_gear", gear);
 
+  // --- glass, pylons, and a contact patch, so the aircraft sits on something ---
+  const glass = flat(0x11151b, { metalness: 0.1, roughness: 0.35 });
+  const cockpit = new THREE.Mesh(new THREE.BoxGeometry(0.66, 0.2, 0.5), glass);
+  cockpit.position.set(0, 0.42, -2.62);
+  group.add(cockpit);
+
+  for (let row = 0; row < 6; row++) {
+    for (const side of [-1, 1]) {
+      const pane = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.11, 0.17), glass);
+      pane.position.set(side * 0.52, 0.2, -1.55 + row * 0.52);
+      group.add(pane);
+    }
+  }
+
+  for (const side of [-1, 1]) {
+    const pylon = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.26, 0.7), air);
+    pylon.position.set(side * 2.1, -0.2, -0.5);
+    group.add(pylon);
+  }
+
+  const patch = new THREE.Mesh(
+    new THREE.CircleGeometry(4.6, 40),
+    new THREE.MeshBasicMaterial({ color: 0x0b0d10, transparent: true, opacity: 0.5, depthWrite: false }),
+  );
+  patch.rotation.x = -Math.PI / 2;
+  patch.position.y = -1.35;
+  group.add(patch);
+
   // Each service point owns its materials, so highlighting one cannot tint its neighbours.
   for (const object of nodes.values()) {
     object.traverse((child) => {
@@ -158,8 +186,13 @@ class View {
 
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(30, 1, 0.1, 100);
-    this.camera.position.set(-9.9, 3.6, -9.5);
-    this.camera.lookAt(-0.2, 0.0, 0.4);
+    this.home = { at: new THREE.Vector3(-9.9, 3.6, -9.5), look: new THREE.Vector3(-0.2, 0.0, 0.4) };
+    this.camera.position.copy(this.home.at);
+    this.look = this.home.look.clone();
+    this.camera.lookAt(this.look);
+    this.at = this.home.at.clone();
+    this.lookAt3 = this.home.look.clone();
+    this.boxes = new Map();
 
     this.scene.add(new THREE.HemisphereLight(0xa6b6cc, 0x101318, 1.7));
     const key = new THREE.DirectionalLight(0xffffff, 2.4);
@@ -200,6 +233,32 @@ class View {
       filter: this.flags.has("fuel_filter_removed") ? -0.5 : 0,
       pump: this.flags.has("hydraulic_pump_removed") ? -0.62 : 0,
     };
+    this.frame(blocker || focus);
+  }
+
+  /** Aim the camera at a node, or back at the whole aircraft when nothing is addressed. */
+  frame(id) {
+    if (!id || !this.twin.nodes.has(id)) {
+      this.at = this.home.at.clone();
+      this.lookAt3 = this.home.look.clone();
+      return;
+    }
+    if (!this.boxes.has(id)) {
+      const box = new THREE.Box3().setFromObject(this.twin.nodes.get(id));
+      const centre = box.getCenter(new THREE.Vector3());
+      const radius = box.getSize(new THREE.Vector3()).length() / 2;
+      this.boxes.set(id, { centre, radius });
+    }
+    const { centre, radius } = this.boxes.get(id);
+    const aspect = this.camera.aspect;
+    const distance =
+      Math.min(Math.max(radius * 5.2, 8.8), 15) *
+      (aspect < 1.2 ? 1.25 : aspect > 1.55 ? 0.86 : 1);
+    const bearing = new THREE.Vector3(-0.8, 0.46, -0.62).normalize();
+    // Keep the aircraft in frame around the part: the eye goes to the part, not to a slab.
+    const anchor = new THREE.Vector3(0, 0, 0.2).lerp(centre, 0.6);
+    this.at = anchor.clone().addScaledVector(bearing, distance);
+    this.lookAt3 = anchor.clone();
   }
 
   step(dt) {
@@ -210,6 +269,11 @@ class View {
     spinner.rotation.y += (this.target.valve - spinner.rotation.y) * ease;
     filter.position.y += (-0.22 + this.target.filter - filter.position.y) * ease;
     pump.position.x += (-2.35 + this.target.pump - pump.position.x) * ease;
+
+    const glide = 1 - Math.exp(-4.2 * dt);
+    this.camera.position.lerp(this.at, glide);
+    this.look.lerp(this.lookAt3, glide);
+    this.camera.lookAt(this.look);
     this.renderer.render(this.scene, this.camera);
   }
 }

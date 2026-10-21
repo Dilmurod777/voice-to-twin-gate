@@ -17,7 +17,7 @@ from app.approaches import context_gate, llm_only, manual_check
 from app.llm import parse
 from app.policy import load_actions, load_manual
 from app.schema import Action, Decision, Status
-from app.twin import Twin, load_hierarchy
+from app.twin import Twin, load_hierarchy, reachable, trail
 
 WEB = Path(__file__).resolve().parent.parent / "web"
 ACTIONS, STEPS, TREE = load_actions(), load_manual(), load_hierarchy()
@@ -56,7 +56,7 @@ class Session:
         spec = ACTIONS.get(key)
 
         arms, timings = [], []
-        for name, tagline, decide in ARMS:
+        for index, (name, tagline, decide) in enumerate(ARMS):
             at = perf_counter()
             decision = decide(
                 action=action, twin=self.twin, actions=ACTIONS, steps=STEPS, tree=TREE
@@ -79,6 +79,7 @@ class Session:
                     "focus": action.part,
                     "blocker": decision.blocker,
                     "note": self._note(decision, moves),
+                    "trace": self._trace(index, action),
                     "after": self._after(spec) if moves else sorted(self.twin.state),
                 }
             )
@@ -97,6 +98,75 @@ class Session:
             "twin": self.state(),
             "timings": {"parse_ms": round(parse_ms, 1), "arms": timings},
         }
+
+    def _trace(self, index: int, action: Action) -> list[dict]:
+        """What each component of this arm produced, so the page can show the pipeline."""
+        spec = ACTIONS.get(f"{action.verb}|{action.part}")
+        rows = [
+            {"stage": "parse", "value": f"{action.verb} · {action.part or 'no part'}"}
+        ]
+
+        if index == 0:
+            state = "pass" if spec else "fail"
+            rows.append(
+                {
+                    "stage": "execute",
+                    "value": "no check" if spec else "no such action",
+                    "state": state,
+                }
+            )
+            return rows
+
+        found = manual_check.best_step(action, STEPS) if action.part else None
+        if index == 2:
+            path = trail(action.part, TREE) if action.part else []
+            ok, why = (
+                reachable(action.part, TREE, self.twin.state)
+                if action.part
+                else (False, "no part")
+            )
+            rows.append(
+                {
+                    "stage": "hierarchy",
+                    "value": " › ".join(path) or "not on the twin",
+                    "state": "pass" if ok else "fail",
+                }
+            )
+            if not ok:
+                rows.append({"stage": "stopped", "value": why, "state": "fail"})
+                return rows
+
+        rows.append(
+            {
+                "stage": "manual",
+                "value": f"step {found}" if found else "no instruction",
+                "state": "pass" if found else "fail",
+            }
+        )
+        if found and found != self.twin.step:
+            rows.append(
+                {
+                    "stage": "stopped",
+                    "value": f"manual is at step {self.twin.step}",
+                    "state": "fail",
+                }
+            )
+            return rows
+
+        if index == 2 and spec:
+            missing = [
+                flag for flag in spec.get("requires", []) if flag not in self.twin.state
+            ]
+            rows.append(
+                {
+                    "stage": "state",
+                    "value": "needs " + " and ".join(missing)
+                    if missing
+                    else "preconditions hold",
+                    "state": "fail" if missing else "pass",
+                }
+            )
+        return rows
 
     def _after(self, spec: dict) -> list[str]:
         """The state this action would leave behind, without touching the real twin."""
@@ -122,6 +192,13 @@ class Session:
             return "nothing to point at"
         return "nothing moves"
 
+    @staticmethod
+    def _command(step: int) -> str:
+        for spec in ACTIONS.values():
+            if step in spec.get("procedure_steps", []):
+                return spec["label"]
+        return ""
+
     def state(self) -> dict:
         return {
             "step": self.twin.step,
@@ -131,6 +208,7 @@ class Session:
                 {
                     "n": n,
                     "text": text,
+                    "command": self._command(n),
                     "done": n < self.twin.step,
                     "current": n == self.twin.step,
                 }

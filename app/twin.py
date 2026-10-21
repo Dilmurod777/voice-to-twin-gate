@@ -61,3 +61,9 @@ class Twin:
             self.state.discard(flag)
         if self.step in spec.get("procedure_steps", []):
             self.step += 1
+
+
+def trail(part: str, tree: dict) -> list[str]:
+    """Labels from the root down to the part, for showing where a command landed."""
+    path = _path_to(part, tree)
+    return [node["label"] for node in path] if path else []
