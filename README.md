@@ -62,16 +62,21 @@ so the eye compares rather than explores.
   they are waiting for.
 
 Three.js is vendored in `web/vendor/` so the demo runs with no network.
+
 ## Quickstart
 
 ```bash
-pip install -e ".[dev]"
-powershell -File scripts/fetch_assets.ps1   # NASA airframe + FAA handbook chapters
-pytest
+uv venv
+uv pip install -e ".[dev]"
+.\.venv\Scripts\python -m pytest          # 44 tests, no model needed
+.\.venv\Scripts\python -m uvicorn app.main:app --port 8017
 ```
 
-The gate and policy are in place and tested (`pytest` "” 15 passing). The demo itself is
-not built yet; `docs/plan.md` is the build order.
+Open http://127.0.0.1:8017 and type a command, or press ▶ on a clip. The parse line above
+the verdicts says `model` when Ollama answered and `keyword` when it did not — the page
+says which, because a lookup table presented as a model would be a lie. Speech-to-text
+needs `uv pip install -e ".[asr]"`; without it the page falls back to each clip's own
+transcript and labels the run `clip (baked)`.
 
 ## Deploy
 
@@ -92,42 +97,31 @@ process binds `$PORT`, which Render sets. Nothing else to configure.
 
 | What | Source | Licence | Used for |
 |---|---|---|---|
-| Airframe, GLB | NASA Airborne Science 3D models, e.g. `G3_LARC_GND_0824.glb` | NASA-produced, not copyrighted | the twin's geometry |
+| Airframe | NASA Airborne Science 3D models, e.g. `G3_LARC_GND_0824.glb` | NASA-produced, not copyrighted | the schematic airframe follows its proportions; the GLB itself is not shipped |
 | Procedures | FAA-H-8083-30B/31B/32B, *Aviation Maintenance Technician Handbook* | US Government work, public domain | step order and preconditions, cited per step |
-| Commands | recorded here: 40 utterances, two speakers | CC BY 4.0 | ASR error and the unsafe-action A/B |
+| Commands | 14 clips synthesised locally with Windows SAPI | CC BY 4.0 | the demo's speech input |
 
-The NASA GLB is a single mesh with eight materials and no part hierarchy, so the twin is
-the airframe plus seven fabricated parts (panel, valve, filter, pump, gear, cowl) placed
-at named anchors. Part IDs are ours; the airframe is NASA's.
+The NASA GLB is a single mesh with eight materials and no part hierarchy, so the twin in the
+browser is a schematic airframe plus seven fabricated parts (panel, valve, filter, pump,
+gear, cowl) placed at named anchors. Part IDs are ours.
 
-There is no public aircraft-maintenance speech corpus. ATCO2 and UWB-ATCC are air-traffic
-radio, not maintenance, and both are licence-gated. Recording is the honest option, and
-forty clips is an afternoon.
+There is no public aircraft-maintenance speech corpus — ATCO2 and UWB-ATCC are air-traffic
+radio, not maintenance, and both are licence-gated — so the demo speaks through synthesised
+clips. A real evaluation would need recorded speech; the ASR path accepts it unchanged.
 
 ## Layout
 
 ```
 app/            gate, twin state, policy loading, API
 app/approaches/ llm_only (baseline), manual_check (2023), context_gate (2026)
-policy/         actions, manual.md, hierarchy.json "” readable rules, no PDF parsing
-web/            Three.js page
+policy/         actions, manual.md, hierarchy.json — readable rules, no PDF parsing
+web/            the page, the 3D twin, the clip audio
 eval/           command set and the three-arm runner
 tests/
-docs/           plan and decisions
+docs/           the demo video
 ```
 
 ## Licence
 
 Code MIT. Audio CC BY 4.0. Models and manuals keep their own terms, credited above.
-
-## Run the demo locally
-
-```nuv venv; uv pip install -e ".[dev]"
-.\.venv\Scripts\python -m uvicorn app.main:app --port 8017
-```
-
-Open http://127.0.0.1:8017 and type a command, or click one of the grouped chips. The
-parse is shown above the three verdicts: `model` when Ollama answered, `keyword` when it
-fall back to the local vocabulary (the page says which, because a lookup table presented as
-a model would be a lie).
 
