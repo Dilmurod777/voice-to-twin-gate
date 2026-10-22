@@ -5,9 +5,9 @@ runs, or it is refused with a reason. The refusal is the point.
 
 ## Watch it
 
-https://github.com/user-attachments/assets/1313ec31-d04e-4983-a124-b9a85f755d3f
+https://github.com/user-attachments/assets/51140cd3-b239-443b-87b9-2a7af856ba5b
 
-49 seconds, no narration. Every step carries a note that says what just happened and why,
+59 seconds, no narration. Every step carries a note that says what just happened and why,
 and the aircraft in each column is the same one. The file is also in the repo:
 [`docs/demo.mp4`](docs/demo.mp4).
 
