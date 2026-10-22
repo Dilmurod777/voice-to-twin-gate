@@ -5,16 +5,16 @@ runs, or it is refused with a reason. The refusal is the point.
 
 ## Watch it
 
-<video controls muted playsinline preload="metadata" width="100%"
-       src="https://github.com/Dilmurod777/voice-to-twin-gate/raw/master/docs/demo.mp4">
-</video>
+[![The walkthrough: one command through all three arms](docs/demo-full.gif)](docs/demo.mp4)
 
-[Open the file directly](docs/demo.mp4) · [GIF preview](docs/demo.gif)
+56 seconds, captioned, every frame taken from the running app. GitHub strips video tags
+from READMEs, so the inline version is a GIF; [`docs/demo.mp4`](docs/demo.mp4) is the same
+file at full frame rate.
 
-A 56-second walkthrough, captioned: the clip is transcribed and parsed, the panel opens
+The clip is transcribed and parsed, the panel opens
 at step 1, then the valve - which the manual lists as step 3 - is **admitted** by the LLM
 arm and **refused** by both checking arms, for two different reasons. It ends on the
-measurement below. The file is `docs/demo.mp4`.
+measurement below.
 
 ## The 20 seconds
 
