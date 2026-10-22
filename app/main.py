@@ -226,7 +226,10 @@ async def transcribe(request: Request) -> dict:
     if len(audio) < 800:
         raise HTTPException(422, "no audio")
     started = perf_counter()
-    text = await run_in_threadpool(asr.transcribe, audio)
+    try:
+        text = await run_in_threadpool(asr.transcribe, audio)
+    except RuntimeError as error:
+        raise HTTPException(503, str(error)) from error
     return {"text": text, "ms": round((perf_counter() - started) * 1000, 1)}
 
 

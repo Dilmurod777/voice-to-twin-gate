@@ -60,6 +60,21 @@ pytest
 The gate and policy are in place and tested (`pytest` â€” 15 passing). The demo itself is
 not built yet; `docs/plan.md` is the build order.
 
+## Deploy
+
+One container, no models. `VTG_NO_ASR=1` turns speech-to-text off, and with no Ollama on
+the host the parse falls back to the keyword parser. The page says which one ran:
+`parse: keyword` in the flow strip and `clip (baked)` in the heard line, because each clip
+was generated from its own text.
+
+```bash
+docker build -t vtg-demo .
+docker run -p 8000:8000 vtg-demo
+```
+
+On Render: New → Web Service → this repository → Runtime **Docker**, free instance. The
+process binds `$PORT`, which Render sets. Nothing else to configure.
+
 ## Datasets
 
 | What | Source | Licence | Used for |

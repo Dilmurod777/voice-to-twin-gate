@@ -21,17 +21,31 @@ async function runClip(text) {
   if (button) button.dataset.playing = "true";
   $("heard").textContent = `hearing ${text}`;
   try {
-    const pcm = await pcm16(`/audio/${slug(text)}.wav`);
-    const response = await fetch("/api/transcribe", {
-      method: "POST",
-      headers: { "Content-Type": "application/octet-stream" },
-      body: pcm,
-    });
-    if (!response.ok) throw new Error(`server ${response.status}`);
-    const { text: heard, ms: took } = await response.json();
-    const said = heard.trim() || text;
+    let said = text;
+    let took = 0;
+    let baked = false;
+    try {
+      const pcm = await pcm16(`/audio/${slug(text)}.wav`);
+      const response = await fetch("/api/transcribe", {
+        method: "POST",
+        headers: { "Content-Type": "application/octet-stream" },
+        body: pcm,
+      });
+      if (!response.ok) throw new Error(`server ${response.status}`);
+      const answer = await response.json();
+      said = answer.text.trim() || text;
+      took = answer.ms;
+    } catch {
+      // No speech model in this build: the clip was generated from this exact text.
+      baked = true;
+    }
     $("cmd").value = said;
     await send(said, took);
+    if (baked) {
+      $("heard").textContent = `clip (baked) → ${$("heard").textContent}`;
+      const cell = document.querySelector("#flow .flow-cell:nth-child(2) .v");
+      if (cell) cell.textContent = "baked";
+    }
   } catch (error) {
     $("heard").textContent = `clip failed: ${error.message}`;
   } finally {

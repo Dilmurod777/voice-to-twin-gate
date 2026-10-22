@@ -11,11 +11,12 @@ PATH, which a bare Python install does not have. `ASR_DEVICE=cuda` opts in when 
 
 import os
 
-import numpy as np
-
 MODEL = os.getenv("ASR_MODEL", "small.en")
 DEVICE = os.getenv("ASR_DEVICE", "cpu")
 COMPUTE = os.getenv("ASR_COMPUTE", "int8")
+
+# The deployed demo ships without whisper: the play buttons carry their own text.
+DISABLED = os.getenv("VTG_NO_ASR", "").strip().lower() in {"1", "true", "yes"}
 
 _model = None
 
@@ -31,6 +32,10 @@ def load():
 
 def transcribe(pcm: bytes) -> str:
     """16 kHz mono float32 in, transcript out. Empty string when nothing was said."""
+    if DISABLED:
+        raise RuntimeError("no speech model in this build")
+    import numpy as np
+
     audio = np.frombuffer(pcm, dtype="<f4").astype(np.float32)
     if audio.size < 1600:
         return ""

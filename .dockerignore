@@ -1,0 +1,10 @@
+.git
+.venv
+assets
+docs
+eval
+scripts
+tests
+__pycache__
+*.pyc
+*.png
