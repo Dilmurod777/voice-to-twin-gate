@@ -5,7 +5,7 @@ runs, or it is refused with a reason. The refusal is the point.
 
 ## Watch it
 
-https://github.com/user-attachments/assets/51140cd3-b239-443b-87b9-2a7af856ba5b
+https://github.com/user-attachments/assets/ed1d1976-51ea-467c-bc68-df2aee8b6566
 
 59 seconds, no narration. Every step carries a note that says what just happened and why,
 and the aircraft in each column is the same one. The file is also in the repo:
