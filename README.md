@@ -5,10 +5,11 @@ runs, or it is refused with a reason. The refusal is the point.
 
 ## Watch it
 
-https://github.com/user-attachments/assets/81220094-f78f-4267-ac10-2201d0d2be1e
+https://github.com/user-attachments/assets/1313ec31-d04e-4983-a124-b9a85f755d3f
 
-56 seconds, captioned, every frame taken from the running app. The file is also in the
-repo: [`docs/demo.mp4`](docs/demo.mp4).
+49 seconds, no narration. Every step carries a note that says what just happened and why,
+and the aircraft in each column is the same one. The file is also in the repo:
+[`docs/demo.mp4`](docs/demo.mp4).
 
 The clip is transcribed and parsed, the panel opens
 at step 1, then the valve - which the manual lists as step 3 - is **admitted** by the LLM
