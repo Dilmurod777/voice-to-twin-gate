@@ -5,11 +5,11 @@ runs, or it is refused with a reason. The refusal is the point.
 
 ## Watch it
 
-[![The walkthrough: one command through all three arms](docs/demo-full.gif)](docs/demo.mp4)
+[![The walkthrough: one command through all three arms](docs/demo-full.gif)](https://cdn.jsdelivr.net/gh/Dilmurod777/voice-to-twin-gate@master/docs/demo.mp4)
 
 56 seconds, captioned, every frame taken from the running app. GitHub strips video tags
-from READMEs, so the inline version is a GIF; [`docs/demo.mp4`](docs/demo.mp4) is the same
-file at full frame rate.
+from READMEs, so the inline version is a GIF; click it for the same file at full frame
+rate in your browser's player. Source: [`docs/demo.mp4`](docs/demo.mp4).
 
 The clip is transcribed and parsed, the panel opens
 at step 1, then the valve - which the manual lists as step 3 - is **admitted** by the LLM
