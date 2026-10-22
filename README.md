@@ -5,10 +5,14 @@ runs, or it is refused with a reason. The refusal is the point.
 
 ## Watch it
 
-[![The page running one command through all three arms](docs/demo.gif)](docs/demo.mp4)
+<video controls muted playsinline preload="metadata" width="100%"
+       src="https://github.com/Dilmurod777/voice-to-twin-gate/raw/master/docs/demo.mp4">
+</video>
+
+[Open the file directly](docs/demo.mp4) · [GIF preview](docs/demo.gif)
 
 A 56-second walkthrough, captioned: the clip is transcribed and parsed, the panel opens
-at step 1, then the valve — which the manual lists as step 3 — is **admitted** by the LLM
+at step 1, then the valve - which the manual lists as step 3 - is **admitted** by the LLM
 arm and **refused** by both checking arms, for two different reasons. It ends on the
 measurement below. The file is `docs/demo.mp4`.
 
