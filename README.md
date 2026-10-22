@@ -5,6 +5,8 @@ runs, or it is refused with a reason. The refusal is the point.
 
 ## Watch it
 
+https://github.com/user-attachments/assets/81220094-f78f-4267-ac10-2201d0d2be1e
+
 [![The walkthrough: one command through all three arms](docs/demo-full.gif)](https://cdn.jsdelivr.net/gh/Dilmurod777/voice-to-twin-gate@master/docs/demo.mp4)
 
 56 seconds, captioned, every frame taken from the running app. GitHub strips video tags
