@@ -8,16 +8,17 @@ parses with the keyword table and says so.
 
 ## Watch it
 
-https://github.com/user-attachments/assets/ed1d1976-51ea-467c-bc68-df2aee8b6566
+![13 seconds: the valve is refused because the access panel is in the way, then the panel opens](docs/demo.gif)
 
-59 seconds, no narration. Every step carries a note that says what just happened and why,
-and the aircraft in each column is the same one. The file is also in the repo:
+13 seconds, no narration, no cuts: the parse, the three verdicts, and the panel that is
+actually in the way of the valve. The 59-second version, with both refusals, is
 [`docs/demo.mp4`](docs/demo.mp4).
 
-The clip is transcribed and parsed, the panel opens
-at step 1, then the valve - which the manual lists as step 3 - is **admitted** by the LLM
-arm and **refused** by both checking arms, for two different reasons. It ends on the
-measurement below.
+https://github.com/user-attachments/assets/ed1d1976-51ea-467c-bc68-df2aee8b6566
+
+In the long version the order is the manual's: the panel opens at step 1, then the valve -
+which the manual lists as step 3 - is **admitted** by the LLM arm and **refused** by both
+checking arms, for two different reasons. It ends on the measurement below.
 
 ## The 20 seconds
 
@@ -47,6 +48,11 @@ not obstructive.
 The parse is an input, not an experiment: the same recorded LLM output feeds every arm,
 so the columns differ only in validation.
 
+Run both through the same 24 commands and the split is the result:
+p50 / p95 **2.98 s / 3.43 s** for the model parse, **0.08 ms / 0.12 ms** for the gate
+(`python -m eval.timings`, qwen3.8-27b on one RTX 5090). The expensive part of this
+system is the language, not the safety check.
+
 ## The page
 
 One command, one page, three answers — each animated on the same aircraft from the same camera,
@@ -54,8 +60,7 @@ so the eye compares rather than explores.
 
 - **A live parse.** The parser is a local model (Ollama) with a keyword fallback when it is not
   running. The strip above the arms says which one answered and how long it took: about 3 s for
-  the model, 0.1 ms for the fallback, and 0.1 ms for all three validators together. The expensive
-  part of this system is the language, not the safety check.
+  the model, 0.1 ms for the fallback. The measurement above gives p50 and p95 for both halves.
 - **Three verdicts.** ADMIT or REFUSE, the reason code, and one sentence a technician could act on.
 - **Three twins.** The airframe is schematic: a NASA hull is one mesh with no part hierarchy, so
   the service points — hatch, valve, filter, pump, gear — are primitives pinned to it. Each arm
