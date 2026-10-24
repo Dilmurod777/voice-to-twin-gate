@@ -23,10 +23,10 @@ measurement below.
 
 | You say | Gate says | Screen |
 |---|---|---|
-| "remove the access panel" | **ADMIT** "” panel 12A, step 1 | panel swings open |
-| "open the fuel valve" | **REFUSE** "” fuel system is not depressurised | nothing moves |
-| "remove the hydraulic pump" | **REFUSE** "” procedure is at step 2; pump is step 6 | nothing moves |
-| "show the landing gear" | **ADMIT** "” read-only | gear highlights |
+| "remove the access panel" | **ADMIT** — panel 12A, step 1 | panel swings open |
+| "open the fuel valve" | **REFUSE** — fuel system is not depressurised | nothing moves |
+| "remove the hydraulic pump" | **REFUSE** — procedure is at step 2; pump is step 6 | nothing moves |
+| "show the landing gear" | **ADMIT** — read-only | gear highlights |
 
 ## The measurement
 
@@ -38,7 +38,7 @@ Same recorded parse, three validators, 24 commands (`python -m eval.run_eval`):
 | Manual check (2023) | 6/13 | 4/6 | 4/5 |
 | Context gate (2026) | **0/13** | **6/6** | **5/5** |
 
-The 2023 arm is not weak "” it stops the wrong step and most malformed commands. It
+The 2023 arm is not weak — it stops the wrong step and most malformed commands. It
 fails where the manual cannot help: it executes a valve that is still pressurised, and
 a filter behind a closed panel. It also refuses a legitimate "show me the landing gear",
 because a view is not an instruction. The 2026 arm is the only one that is both safe and
