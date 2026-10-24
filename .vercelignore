@@ -1,0 +1,6 @@
+.venv/
+tests/
+docs/
+__pycache__/
+*.egg-info/
+.vercel/

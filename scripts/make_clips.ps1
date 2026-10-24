@@ -1,12 +1,12 @@
 # One clip per command, synthesised locally so the demo ships with its own audio.
 # Usage: powershell -NoProfile -File scripts\make_clips.ps1
-# Files land in web\audio\<slug>.wav and are committed; nothing is fetched at runtime.
+# Files land in public\audio\<slug>.wav and are committed; nothing is fetched at runtime.
 
 Add-Type -AssemblyName System.Speech
 
 function Slug($text) { ($text.ToLower() -replace "[^a-z0-9]+", "-").Trim("-") }
 
-$dir = Join-Path $PSScriptRoot "..\web\audio"
+$dir = Join-Path $PSScriptRoot "..\public\audio"
 New-Item -ItemType Directory -Force $dir | Out-Null
 
 $lines = @(

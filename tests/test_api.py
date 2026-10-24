@@ -14,7 +14,7 @@ def offline(monkeypatch):
     monkeypatch.setattr(
         main, "parse", lambda text, actions: (keyword_parse(text), "keyword")
     )
-    main.session.reset()
+    client.cookies.clear()
 
 
 def head(text):

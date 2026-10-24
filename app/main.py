@@ -1,14 +1,16 @@
-"""The demo server: one in-memory aircraft, three validators per command.
+"""The demo server: one aircraft per browser, three validators per command.
 
 A command is parsed once and the aircraft is frozen into a snapshot; each arm then answers
 on its own request against that snapshot, so a slow arm cannot hold up a fast one. Only
 the 2026 arm moves the real twin.
 """
 
+import base64
+import json
 from pathlib import Path
 from time import perf_counter
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.concurrency import run_in_threadpool
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -20,7 +22,7 @@ from app.policy import load_actions, load_manual
 from app.schema import Action, Decision, Status, Step
 from app.twin import Twin, load_hierarchy
 
-WEB = Path(__file__).resolve().parent.parent / "web"
+WEB = Path(__file__).resolve().parent.parent / "public"
 ACTIONS, STEPS, TREE = load_actions(), load_manual(), load_hierarchy()
 
 ARMS = [
@@ -193,30 +195,80 @@ class Command(BaseModel):
     asr_ms: float = 0
 
 
+COOKIE = "vtg"
+
+
+def load(request: Request) -> Session:
+    """A snapshot per request: a stateless host may answer the next call elsewhere."""
+    raw = request.cookies.get(COOKIE, "")
+    if not raw:
+        return Session()
+    try:
+        data = json.loads(base64.urlsafe_b64decode(raw + "=" * (-len(raw) % 4)))
+        session = Session()
+        session.twin = Twin(data["twin"]["step"], set(data["twin"]["state"]))
+        pending = data.get("pending")
+        if pending:
+            session.pending = {
+                **pending,
+                "action": Action(**pending["action"]),
+                "twin": Twin(pending["twin"]["step"], set(pending["twin"]["state"])),
+            }
+        return session
+    except (KeyError, TypeError, ValueError):
+        return Session()
+
+
+def save(response: Response, session: Session, pending: bool) -> None:
+    snapshot = {
+        "twin": {"step": session.twin.step, "state": sorted(session.twin.state)}
+    }
+    if pending and session.pending:
+        item = session.pending
+        snapshot["pending"] = {
+            **{
+                key: item[key]
+                for key in ("source", "text", "applied", "parse_ms", "asr_ms")
+            },
+            "action": item["action"].model_dump(),
+            "twin": {"step": item["twin"].step, "state": sorted(item["twin"].state)},
+        }
+    raw = base64.urlsafe_b64encode(json.dumps(snapshot).encode()).decode().rstrip("=")
+    response.set_cookie(COOKIE, raw, max_age=3600, httponly=True, samesite="lax")
+
+
 app = FastAPI(title="voice-to-twin-gate")
-session = Session()
 
 
 @app.post("/api/command")
-def command(body: Command) -> dict:
-    return session.prepare(body.text.strip(), body.asr_ms)
+def command(body: Command, request: Request, response: Response) -> dict:
+    session = load(request)
+    head = session.prepare(body.text.strip(), body.asr_ms)
+    save(response, session, pending=True)
+    return head
 
 
 @app.post("/api/arm/{index}")
-def arm(index: int) -> dict:
+def arm(index: int, request: Request, response: Response) -> dict:
     if not 0 <= index < len(ARMS):
         raise HTTPException(status_code=404, detail="no such arm")
-    return session.arm(index)
+    session = load(request)
+    answer = session.arm(index)
+    if index == 2:
+        # Only the arm that can move the twin writes, so a slower refusal cannot undo it.
+        save(response, session, pending=True)
+    return answer
 
 
 @app.get("/api/state")
-def state() -> dict:
-    return session.state()
+def state(request: Request) -> dict:
+    return load(request).state()
 
 
 @app.post("/api/reset")
-def reset() -> dict:
-    session.reset()
+def reset(response: Response) -> dict:
+    session = Session()
+    save(response, session, pending=False)
     return session.state()
 
 
@@ -233,4 +285,6 @@ async def transcribe(request: Request) -> dict:
     return {"text": text, "ms": round((perf_counter() - started) * 1000, 1)}
 
 
-app.mount("/", StaticFiles(directory=WEB, html=True), name="web")
+# Vercel serves public/ from its CDN and does not put it in the function bundle.
+if WEB.is_dir():
+    app.mount("/", StaticFiles(directory=WEB, html=True), name="web")

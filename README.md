@@ -3,6 +3,9 @@
 Speech becomes a checked action on a 3D aircraft. The gate has two outcomes: the action
 runs, or it is refused with a reason. The refusal is the point.
 
+**Live:** https://voice-to-twin-gate.vercel.app — the free instance has no model, so it
+parses with the keyword table and says so.
+
 ## Watch it
 
 https://github.com/user-attachments/assets/ed1d1976-51ea-467c-bc68-df2aee8b6566
@@ -61,7 +64,7 @@ so the eye compares rather than explores.
 - **Loading is shown, not faked.** The form locks, the pipeline strip sweeps, and the bays say what
   they are waiting for.
 
-Three.js is vendored in `web/vendor/` so the demo runs with no network.
+Three.js is vendored in `public/vendor/` so the demo runs with no network.
 
 ## Quickstart
 
@@ -93,6 +96,12 @@ docker run -p 8000:8000 vtg-demo
 On Render: New → Web Service → this repository → Runtime **Docker**, free instance. The
 process binds `$PORT`, which Render sets. Nothing else to configure.
 
+On Vercel (free Hobby, no card): import the repository and keep the detected **FastAPI**
+preset. `public/` is served from the CDN, `app/main.py` becomes the function, and the
+aircraft snapshot rides in a cookie because each request may land on a different
+instance. Set `VTG_NO_ASR=1` — the free plan has no speech model, so the clips fall back
+to their own transcripts.
+
 ## Datasets
 
 | What | Source | Licence | Used for |
@@ -115,7 +124,7 @@ clips. A real evaluation would need recorded speech; the ASR path accepts it unc
 app/            gate, twin state, policy loading, API
 app/approaches/ llm_only (baseline), manual_check (2023), context_gate (2026)
 policy/         actions, manual.md, hierarchy.json — readable rules, no PDF parsing
-web/            the page, the 3D twin, the clip audio
+public/         the page, the 3D twin, the clip audio
 eval/           command set and the three-arm runner
 tests/
 docs/           the demo video

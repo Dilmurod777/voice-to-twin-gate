@@ -10,7 +10,7 @@ WORKDIR /srv
 COPY pyproject.toml ./
 COPY app ./app
 COPY policy ./policy
-COPY web ./web
+COPY public ./public
 
 RUN pip install --no-cache-dir .
 

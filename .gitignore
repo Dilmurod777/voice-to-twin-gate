@@ -3,8 +3,10 @@ __pycache__/
 *.pyc
 .venv/
 *.egg-info/
+.vercel/
 
 # Fetched assets: large, and not ours to redistribute in bulk
 assets/models/
 assets/docs/
 assets/audio/
+.vercel
